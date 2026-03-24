@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/ed25519"
 	"fmt"
 	"time"
 
@@ -17,11 +18,12 @@ func (c *Client) handlePing(raw []byte, p *protocol.Ping) error {
 	logInfo("handshake", "PING from=%s", fmtUUID(senderID))
 
 	// Only accept peers from the whitelist.
-	pubEd, ok := c.cfg.Whitelist[senderID]
-	if !ok {
+	if _, ok := c.cfg.Whitelist[p.PubKeyEd25519]; !ok {
 		logWarn("handshake", "PING from unlisted peer=%s — ignored", fmtUUID(senderID))
 		return nil // not a hard error; could be an unknown node
 	}
+
+	pubEd := ed25519.PublicKey(p.PubKeyEd25519[:])
 
 	// Verify ed25519 signature over the frame bytes minus the trailing sig.
 	if !protocol.Verify(pubEd, raw[:len(raw)-protocol.SignatureSize], p.GetSignature()) {
@@ -47,6 +49,7 @@ func (c *Client) handlePing(raw []byte, p *protocol.Ping) error {
 	// Reply with PONG carrying our ephemeral public key.
 	pong := &protocol.Pong{Body: []byte(protocol.ClientHello)}
 	copy(pong.PubKeyX25519[:], c.ephPub[:])
+	copy(pong.PubKeyEd25519[:], c.edPub)
 	h := pong.GetHeader()
 	h.RoomUUID = c.cfg.RoomUUID
 	h.ReceiverUUID = senderID
@@ -72,8 +75,9 @@ func (c *Client) handlePong(raw []byte, p *protocol.Pong) error {
 	senderID := p.GetHeader().SenderUUID
 	logInfo("handshake", "PONG from=%s", fmtUUID(senderID))
 
-	pubEd, ok := c.cfg.Whitelist[senderID]
-	if !ok {
+	pubEd := ed25519.PublicKey(p.PubKeyEd25519[:])
+
+	if _, ok := c.cfg.Whitelist[p.PubKeyEd25519]; !ok {
 		logWarn("handshake", "PONG from unlisted peer=%s — ignored", fmtUUID(senderID))
 		return nil
 	}
@@ -132,11 +136,8 @@ func (c *Client) handleInfo(p *protocol.Info) error {
 			logDebug("handshake", "INFO: peer=%s already known — skip", fmtUUID(uid))
 			continue
 		}
-		// Check if this peer is in our whitelist before PINGing.
-		if _, ok := c.cfg.Whitelist[uid]; !ok {
-			logWarn("handshake", "INFO: peer=%s not in whitelist — skip", fmtUUID(uid))
-			continue
-		}
+		// We don't know the ed25519 key of this peer yet — the whitelist check
+		// will happen in handlePing/handlePong once they respond with their key.
 		logInfo("handshake", "INFO: sending PING to new peer=%s", fmtUUID(uid))
 		if err := c.sendPingTo(uid); err != nil {
 			logError("handshake", "send PING to %s: %v", fmtUUID(uid), err)

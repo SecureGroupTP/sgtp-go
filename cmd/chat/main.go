@@ -33,6 +33,7 @@ import (
 
 	sgtp "github.com/SecureGroupTP/sgtp-go/client"
 	"github.com/SecureGroupTP/sgtp-go/protocol"
+	"golang.org/x/crypto/ssh"
 )
 
 func main() {
@@ -50,26 +51,33 @@ func main() {
 	printErr("=== SGTP Chat ===")
 	printErr("Generating ed25519 identity …")
 
-	pubKey, privKey, err := protocol.GenerateEd25519()
+	pubKey, privKey, err := collectPeerKeyPair(stdin)
 	must(err, "generate ed25519")
 
 	myUUID := newUUID()
+	roomID := newUUID()
+
+	wlist, err := buildWhitelist([]string{
+		"AAAAC3NzaC1lZDI1NTE5AAAAIHIfJYPmiTSuS/fvlV+s2BnUaulkTrRJUNz8D2WYhtnf",
+		"AAAAC3NzaC1lZDI1NTE5AAAAIBEH5TJGcAv4W6tngWspw06jhD95iwSqRRO6vSW7gAMT",
+		"AAAAC3NzaC1lZDI1NTE5AAAAICwn08JpI/ATboTg6HB7g0rU4sgI6OTne7t6+Tkk7RAh",
+	})
+
+	if err != nil {
+		panic(fmt.Sprintf("error while to building whitelist: %s", err.Error()))
+	}
 
 	// Print to stdout so the user can copy-paste to the peer.
 	fmt.Printf("─── Share with your peer ───────────────────────────────────────\n")
 	fmt.Printf("UUID  : %s\n", hexStr(myUUID[:]))
+	fmt.Printf("Room  : %s\n", hexStr(roomID[:]))
 	fmt.Printf("PUBKEY: %s\n", hexStr(pubKey))
 	fmt.Printf("────────────────────────────────────────────────────────────────\n\n")
 
 	// ── 2. Collect peer identity ─────────────────────────────────────────────
-	peerUUID, peerPubKey := collectPeerIdentity(stdin)
+	roomID = collectPeerIdentity(stdin)
 
 	// ── 3. Derive room ID (commutative XOR of the two UUIDs) ─────────────────
-	var roomID [16]byte
-	for i := 0; i < 16; i++ {
-		roomID[i] = myUUID[i] ^ peerUUID[i]
-	}
-	printErr("Room ID: %s", hexStr(roomID[:]))
 
 	// ── 4. Build client ──────────────────────────────────────────────────────
 	c, err := sgtp.New(sgtp.Config{
@@ -77,10 +85,9 @@ func main() {
 		RoomUUID:   roomID,
 		UUID:       myUUID,
 		PrivateKey: privKey,
-		Whitelist: map[[16]byte]ed25519.PublicKey{
-			peerUUID: peerPubKey,
-		},
-		InfoDelay: *infoDelay,
+		PublicKey:  pubKey,
+		Whitelist:  wlist,
+		InfoDelay:  *infoDelay,
 	})
 	must(err, "create client")
 
@@ -172,14 +179,14 @@ func runEventLoop(c *sgtp.Client, ckReady chan<- struct{}, _ ed25519.PrivateKey)
 
 			// If we are the master, issue a Chat Key to this peer.
 			if c.IsMaster() {
-				printErr("[master] we are master — issuing Chat Key to %s", hexShort(ev.PeerUUID[:]))
-				go func(peerID [16]byte) {
+				printErr("[master] we are master — issuing Chat Key")
+				go func() {
 					// Brief delay so the peer's PONG finishes processing.
 					time.Sleep(100 * time.Millisecond)
-					if err := c.IssueChatKey(peerID); err != nil {
+					if err := c.IssueChatKeyToAll(); err != nil {
 						printErr("[master] IssueChatKey error: %v", err)
 					}
-				}(ev.PeerUUID)
+				}()
 			}
 
 		case sgtp.EventPeerLeft:
@@ -209,11 +216,11 @@ func runEventLoop(c *sgtp.Client, ckReady chan<- struct{}, _ ed25519.PrivateKey)
 
 // ─── Peer identity collection ─────────────────────────────────────────────────
 
-func collectPeerIdentity(r *bufio.Reader) ([16]byte, ed25519.PublicKey) {
+func collectPeerIdentity(r *bufio.Reader) [16]byte {
 	var peerUUID [16]byte
 
 	for {
-		fmt.Print("Enter peer UUID   : ")
+		fmt.Print("Enter room UUID   : ")
 		uuidHex := strings.TrimSpace(readLine(r))
 		uuidHex = strings.ReplaceAll(uuidHex, "-", "")
 		b, err := hex.DecodeString(uuidHex)
@@ -225,20 +232,7 @@ func collectPeerIdentity(r *bufio.Reader) ([16]byte, ed25519.PublicKey) {
 		break
 	}
 
-	var peerPubKey ed25519.PublicKey
-	for {
-		fmt.Print("Enter peer PUBKEY : ")
-		pubHex := strings.TrimSpace(readLine(r))
-		pubHex = strings.ReplaceAll(pubHex, " ", "")
-		b, err := hex.DecodeString(pubHex)
-		if err != nil || len(b) != ed25519.PublicKeySize {
-			fmt.Fprintln(os.Stderr, "  ✗ must be 64 hex characters (32 bytes). Try again.")
-			continue
-		}
-		peerPubKey = ed25519.PublicKey(b)
-		break
-	}
-	return peerUUID, peerPubKey
+	return peerUUID
 }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -269,5 +263,92 @@ func newUUID() [16]byte {
 func must(err error, msg string) {
 	if err != nil {
 		log.Fatalf("[FATAL] %s: %v", msg, err)
+	}
+}
+
+func buildWhitelist(keysSSH []string) (map[[32]byte]struct{}, error) {
+	whitelist := make(map[[32]byte]struct{}, len(keysSSH))
+
+	for i, keyStr := range keysSSH {
+		// Убираем возможные префиксы типа "ssh-ed25519 " и комментарии
+		parts := strings.Fields(keyStr)
+		var keyBlob string
+		if len(parts) >= 2 {
+			keyBlob = parts[1] // берём base64-часть
+		} else {
+			keyBlob = keyStr
+		}
+
+		// Парсим как SSH public key
+		pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte("ssh-ed25519 " + keyBlob))
+		if err != nil {
+			return nil, fmt.Errorf("invalid SSH key at index %d: %w", i, err)
+		}
+
+		// Извлекаем сырой ed25519.PublicKey
+		rawKey, ok := pubKey.(ssh.CryptoPublicKey).CryptoPublicKey().(ed25519.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("key at index %d is not ed25519", i)
+		}
+
+		// Конвертируем []byte -> [32]byte
+		if len(rawKey) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("invalid key length at index %d", i)
+		}
+		var keyArray [32]byte
+		copy(keyArray[:], rawKey)
+		whitelist[keyArray] = struct{}{}
+	}
+	return whitelist, nil
+}
+
+func collectPeerPublicKey(r *bufio.Reader) (ed25519.PublicKey, error) {
+	for {
+		fmt.Print("Enter peer public key file: ")
+		filename := strings.TrimSpace(readLine(r))
+
+		if filename == "" {
+			fmt.Fprintln(os.Stderr, "  ✗ filename cannot be empty. Try again.")
+			continue
+		}
+
+		pubKey, _, err := protocol.LoadEd25519FromOpenSSHFile(filename)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ failed to load key from %s: %v. Try again.\n", filename, err)
+			continue
+		}
+
+		if len(pubKey) != ed25519.PublicKeySize {
+			fmt.Fprintln(os.Stderr, "  ✗ invalid public key size. Try again.")
+			continue
+		}
+
+		return pubKey, nil
+	}
+}
+func collectPeerKeyPair(r *bufio.Reader) (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	for {
+		fmt.Print("Enter peer key file: ")
+		filename := strings.TrimSpace(readLine(r))
+
+		if filename == "" {
+			fmt.Fprintln(os.Stderr, "  ✗ filename cannot be empty. Try again.")
+			continue
+		}
+
+		// Сначала пробуем raw-формат (твоя функция из protocol)
+		pubKey, privKey, err := protocol.LoadEd25519FromFileRaw(filename)
+		if err == nil {
+			return pubKey, privKey, nil
+		}
+
+		// Потом пробуем OpenSSH-формат
+		pubKey, privKey, err = protocol.LoadEd25519FromOpenSSHFile(filename)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ failed to load keys: %v. Try again.\n", err)
+			continue
+		}
+
+		return pubKey, privKey, nil
 	}
 }

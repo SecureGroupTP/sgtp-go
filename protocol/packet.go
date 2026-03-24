@@ -57,23 +57,23 @@ var BroadcastUUID = [16]byte{}
 type PacketType uint16
 
 const (
-	TypePing            PacketType = 0x01
-	TypePong            PacketType = 0x02
-	TypeInfo            PacketType = 0x03
-	TypeChatRequest     PacketType = 0x04
-	TypeChatKey         PacketType = 0x05
-	TypeChatKeyACK      PacketType = 0x06
-	TypeMessage         PacketType = 0x07
-	TypeMessageFailed   PacketType = 0x08
+	TypePing             PacketType = 0x01
+	TypePong             PacketType = 0x02
+	TypeInfo             PacketType = 0x03
+	TypeChatRequest      PacketType = 0x04
+	TypeChatKey          PacketType = 0x05
+	TypeChatKeyACK       PacketType = 0x06
+	TypeMessage          PacketType = 0x07
+	TypeMessageFailed    PacketType = 0x08
 	TypeMessageFailedACK PacketType = 0x09
-	TypeStatus          PacketType = 0x0A
-	TypeHSIR            PacketType = 0x0B
-	TypeHSI             PacketType = 0x0C
-	TypeHSR             PacketType = 0x0D
-	TypeHSRA            PacketType = 0x0E
-	TypeFIN             PacketType = 0x0F
-	TypeKickRequest     PacketType = 0x10
-	TypeKicked          PacketType = 0x11
+	TypeStatus           PacketType = 0x0A
+	TypeHSIR             PacketType = 0x0B
+	TypeHSI              PacketType = 0x0C
+	TypeHSR              PacketType = 0x0D
+	TypeHSRA             PacketType = 0x0E
+	TypeFIN              PacketType = 0x0F
+	TypeKickRequest      PacketType = 0x10
+	TypeKicked           PacketType = 0x11
 )
 
 func (t PacketType) String() string {
@@ -159,9 +159,9 @@ type base struct {
 	Signature [SignatureSize]byte
 }
 
-func (b *base) GetHeader() *Header    { return &b.Hdr }
-func (b *base) GetSignature() []byte  { return b.Signature[:] }
-func (b *base) Type() PacketType      { return b.Hdr.PacketType }
+func (b *base) GetHeader() *Header   { return &b.Hdr }
+func (b *base) GetSignature() []byte { return b.Signature[:] }
+func (b *base) Type() PacketType     { return b.Hdr.PacketType }
 
 // ─── PING 0x01 ───────────────────────────────────────────────────────────────
 
@@ -203,16 +203,18 @@ func unmarshalPing(h *Header, payload, sig []byte) (*Ping, error) {
 // Pong is client A's reply to a Ping. It carries A's ephemeral x25519 key.
 type Pong struct {
 	base
-	PubKeyX25519 [32]byte
-	Body         []byte // CLIENT_HELLO echo in plaintext
+	PubKeyX25519  [32]byte
+	PubKeyEd25519 [32]byte
+	Body          []byte // CLIENT_HELLO echo in plaintext
 }
 
 func (p *Pong) Marshal() []byte {
 	p.Hdr.Version = ProtocolVersion
 	p.Hdr.PacketType = TypePong
-	p.Hdr.PayloadLen = uint32(32 + len(p.Body))
+	p.Hdr.PayloadLen = uint32(32 + 32 + len(p.Body))
 	buf := MarshalHeader(&p.Hdr)
 	buf = append(buf, p.PubKeyX25519[:]...)
+	buf = append(buf, p.PubKeyEd25519[:]...)
 	buf = append(buf, p.Body...)
 	buf = append(buf, p.Signature[:]...)
 	return buf
@@ -225,7 +227,8 @@ func unmarshalPong(h *Header, payload, sig []byte) (*Pong, error) {
 	p := &Pong{}
 	p.Hdr = *h
 	copy(p.PubKeyX25519[:], payload[0:32])
-	p.Body = append([]byte{}, payload[32:]...)
+	copy(p.PubKeyEd25519[:], payload[32:64])
+	p.Body = append([]byte{}, payload[64:]...)
 	copy(p.Signature[:], sig)
 	return p, nil
 }
@@ -332,8 +335,8 @@ func unmarshalChatRequest(h *Header, payload, sig []byte) (*ChatRequest, error) 
 type ChatKey struct {
 	base
 	// Plaintext after decryption:
-	Epoch   uint64
-	Key     [32]byte
+	Epoch uint64
+	Key   [32]byte
 	// Raw encrypted payload (what travels on the wire):
 	Ciphertext []byte
 }

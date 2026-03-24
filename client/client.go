@@ -299,10 +299,19 @@ func (c *Client) dispatch(raw []byte) error {
 		if err == nil && hdr.PacketType == 0 {
 			senderID := hdr.SenderUUID
 			logInfo("dispatch", "intent frame from new peer=%s — sending PING", fmtUUID(senderID))
-			if _, ok := c.cfg.Whitelist[senderID]; !ok {
-				logWarn("dispatch", "intent from unlisted peer=%s — ignored", fmtUUID(senderID))
-				return nil
-			}
+			/*
+			   c.peersMu.Lock()
+			   			c.peers[senderID] = &Peer{
+			   				UUID: uuid.UUID(senderID[:]),
+			   				PubKeyEd25519: hdr.,
+			   			}
+			   			c.peersMu.Unlock()
+			*/
+			//if _, ok := c.cfg.Whitelist[senderID]; !ok {
+			//	logWarn("dispatch", "intent from unlisted peer=%s — ignored", fmtUUID(senderID))
+			//	return nil
+			//}
+			// maybe this is useless check
 			return c.sendPingTo(senderID)
 		}
 	}

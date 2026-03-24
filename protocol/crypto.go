@@ -5,11 +5,15 @@ package protocol
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/pem"
 	"fmt"
+	"os"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
+	"golang.org/x/crypto/ssh"
 )
 
 // ─── Key generation ──────────────────────────────────────────────────────────
@@ -17,6 +21,97 @@ import (
 // GenerateEd25519 creates a new long-term ed25519 identity key pair.
 func GenerateEd25519() (ed25519.PublicKey, ed25519.PrivateKey, error) {
 	return ed25519.GenerateKey(rand.Reader)
+}
+
+func LoadEd25519FromFileRaw(filename string) (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: read key file: %w", err)
+	}
+
+	// Попытка распарсить как PEM (RFC 8410)
+	if block, _ := pem.Decode(data); block != nil {
+		switch block.Type {
+		case "ED25519 PRIVATE KEY":
+			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: parse PKCS#8: %w", err)
+			}
+			priv, ok := key.(ed25519.PrivateKey)
+			if !ok {
+				return nil, nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: key is not ed25519")
+			}
+			return priv.Public().(ed25519.PublicKey), priv, nil
+
+		case "PRIVATE KEY": // untyped PKCS#8
+			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: parse PKCS#8: %w", err)
+			}
+			priv, ok := key.(ed25519.PrivateKey)
+			if !ok {
+				return nil, nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: key is not ed25519")
+			}
+			return priv.Public().(ed25519.PublicKey), priv, nil
+		}
+	}
+
+	// Fallback: сырые байты
+	switch len(data) {
+	case ed25519.PrivateKeySize: // 64 байта: приватный + публичный
+		priv := ed25519.PrivateKey(data)
+		return priv.Public().(ed25519.PublicKey), priv, nil
+
+	case ed25519.SeedSize: // 32 байта: только сид, выведем пару
+		seed := make([]byte, ed25519.SeedSize)
+		copy(seed, data)
+		priv := ed25519.NewKeyFromSeed(seed)
+		return priv.Public().(ed25519.PublicKey), priv, nil
+
+	default:
+		return nil, nil, fmt.Errorf(
+			"github.com/SecureGroupTP/sgtp-go/client: invalid key size %d; expected %d (seed) or %d (full private)",
+			len(data), ed25519.SeedSize, ed25519.PrivateKeySize,
+		)
+	}
+}
+
+func LoadEd25519FromOpenSSHFile(filename string) (ed25519.PublicKey, ed25519.PrivateKey, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read file: %w", err)
+	}
+
+	// 1. Пробуем как приватный ключ через ParseRawPrivateKey
+	rawKey, err := ssh.ParseRawPrivateKey(data)
+	if err == nil {
+		var edPriv ed25519.PrivateKey
+
+		switch v := rawKey.(type) {
+		case ed25519.PrivateKey:
+			edPriv = v
+		case *ed25519.PrivateKey:
+			edPriv = *v
+		default:
+			return nil, nil, fmt.Errorf("key is not Ed25519, got %T", rawKey)
+		}
+
+		edPub := edPriv.Public().(ed25519.PublicKey)
+		return edPub, edPriv, nil
+	}
+
+	// 2. Пробуем как публичный ключ в формате authorized_keys
+	sshPub, _, _, _, err := ssh.ParseAuthorizedKey(data)
+	if err == nil && sshPub.Type() == ssh.KeyAlgoED25519 {
+		cryptoPub := sshPub.(ssh.CryptoPublicKey).CryptoPublicKey()
+		edPub, ok := cryptoPub.(ed25519.PublicKey)
+		if !ok {
+			return nil, nil, fmt.Errorf("failed to convert to ed25519.PublicKey")
+		}
+		return edPub, nil, nil
+	}
+
+	return nil, nil, fmt.Errorf("unrecognized Ed25519 key format: %w", err)
 }
 
 // GenerateX25519 creates a new ephemeral x25519 key pair.

@@ -108,10 +108,11 @@ type Config struct {
 	// PrivateKey is the long-term ed25519 private key (64 bytes).
 	// Generate with protocol.GenerateEd25519().
 	PrivateKey ed25519.PrivateKey
+	PublicKey  ed25519.PublicKey
 
 	// Whitelist maps each peer UUID to their trusted ed25519 public key.
 	// Frames from peers not in the whitelist are silently dropped.
-	Whitelist map[[16]byte]ed25519.PublicKey
+	Whitelist map[[ed25519.PublicKeySize]byte]struct{}
 
 	// MessageBufferSize is the capacity of the inbound message channel (default 64).
 	// If the channel is full, new messages are dropped and an EventError is emitted.
