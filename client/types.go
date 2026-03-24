@@ -18,6 +18,29 @@ import (
 	"github.com/SecureGroupTP/sgtp-go/protocol"
 )
 
+// HistoryStore is an optional interface for persisting and serving message history.
+// Implementations store decoded message records (sender + plaintext), not raw
+// encrypted frames — this allows history to be served to new participants who
+// joined after a CK rotation and therefore cannot decrypt old epochs.
+type HistoryStore interface {
+	// Count returns the total number of stored messages.
+	Count() uint64
+	// Fetch returns message records starting at offset, up to limit entries.
+	// If limit is 0, all messages from offset are returned.
+	Fetch(offset, limit uint64) []HistoryRecord
+	// Append stores a decoded message record.
+	Append(r HistoryRecord)
+}
+
+// HistoryRecord is a single stored message entry.
+type HistoryRecord struct {
+	SenderUUID  [16]byte
+	MessageUUID [16]byte
+	Timestamp   uint64 // Unix ms, from frame header
+	Nonce       uint64 // original nonce, for ordering
+	Data        []byte // decrypted plaintext
+}
+
 // ─── Peer ────────────────────────────────────────────────────────────────────
 
 // Peer holds the cryptographic material for one remote participant.
@@ -25,6 +48,7 @@ type Peer struct {
 	UUID          [16]byte
 	PubKeyEd25519 ed25519.PublicKey
 	SharedSecret  [32]byte // x25519 DH result — used to encrypt control frames
+	LastPongAt    time.Time // timestamp of the most recent PONG from this peer
 }
 
 // ─── InboundMessage ───────────────────────────────────────────────────────────
@@ -128,6 +152,11 @@ type Config struct {
 	// (§3 Step 4). Defaults to 500ms. A shorter value speeds up discovery in
 	// low-latency environments.
 	InfoDelay time.Duration
+
+	// HistoryStore is an optional persistent message store.
+	// When set, incoming MESSAGE frames are appended and HSIR/HSR are served
+	// from this store.  If nil, history features return empty results.
+	HistoryStore HistoryStore
 }
 
 func (cfg *Config) applyDefaults() {
@@ -166,4 +195,24 @@ func historyBatchFromHSRA(p *protocol.HSRA) HistoryBatch {
 		Messages:     p.Messages,
 		IsLast:       p.IsEndOfStream(),
 	}
+}
+
+// ExtractMessages splits a HistoryBatch into individual raw MESSAGE frame blobs.
+// Each blob is a valid MESSAGE frame re-encrypted with the current CK by the
+// serving peer — pass it to Client.DecryptMessageFrame to get plaintext.
+func (b *HistoryBatch) ExtractMessages() [][]byte {
+	if len(b.Offsets) == 0 {
+		return nil
+	}
+	out := make([][]byte, len(b.Offsets))
+	for i, off := range b.Offsets {
+		end := uint64(len(b.Messages))
+		if i+1 < len(b.Offsets) {
+			end = b.Offsets[i+1]
+		}
+		raw := make([]byte, end-off)
+		copy(raw, b.Messages[off:end])
+		out[i] = raw
+	}
+	return out
 }

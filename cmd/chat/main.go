@@ -1,140 +1,184 @@
-// Command chat is an interactive two-party SGTP console client.
+// Command chat is an interactive multi-party SGTP console client.
 //
-// Run on two machines (or two terminals on localhost) to chat:
+// Usage:
 //
-//	Terminal 1:  go run ./cmd/server          # start relay (once)
-//	Terminal 2:  go run ./cmd/chat -server localhost:7777
-//	Terminal 3:  go run ./cmd/chat -server localhost:7777
+//	# Start the relay server once (any machine with a public IP):
+//	go run ./cmd/server
 //
-// Each client prints its UUID and public key on stdout. Copy those values into
-// the other client when prompted. After the handshake completes the master
-// (smallest UUID) issues a Chat Key automatically, and both sides can type
-// messages.
+//	# Each participant:
+//	go run ./cmd/chat \
+//	    -key       ./keys/ed1   \   # your ed25519 private key (OpenSSH or raw)
+//	    -whitelist ./keys/       \   # directory with trusted public keys
+//	    -room      <32-hex>      \   # shared room UUID; omit to generate one
+//	    -server    localhost:7777
+//
+// -whitelist scans the directory for files, tries to load each as an ed25519
+// public key (OpenSSH or raw 32-byte). Files that don't parse as ed25519 pub
+// keys (private keys, RSA, ECDSA, etc.) are silently skipped.
+//
+// When a client joins a room that already has participants, it automatically
+// requests message history and replays it to the terminal.
 //
 // I/O convention:
 //
-//	stdout  — user prompts, received messages (pipe-friendly)
-//	stderr  — all log / debug output
+//	stdout — prompts and messages (pipe-friendly)
+//	stderr — structured log output
 package main
 
 import (
 	"bufio"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	sgtp "github.com/SecureGroupTP/sgtp-go/client"
 	"github.com/SecureGroupTP/sgtp-go/protocol"
-	"golang.org/x/crypto/ssh"
 )
 
+// ─── main ─────────────────────────────────────────────────────────────────────
+
 func main() {
-	serverAddr := flag.String("server", "localhost:7777", "relay server TCP address")
-	infoDelay := flag.Duration("infodelay", 500*time.Millisecond, "discovery delay after first handshake")
+	serverAddr  := flag.String("server", "localhost:7777", "relay server address (host:port)")
+	keyFile     := flag.String("key", "", "path to your ed25519 private key file (required)")
+	whitelistDir := flag.String("whitelist", "", "directory containing trusted ed25519 public key files")
+	roomHex    := flag.String("room", "", "room UUID as 32 hex chars; omit to generate a new one")
+	infoDelay  := flag.Duration("infodelay", 500*time.Millisecond, "peer-discovery delay after first handshake")
 	flag.Parse()
 
-	// All structured logs → stderr.
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 
-	stdin := bufio.NewReader(os.Stdin)
+	// ── 1. Load identity key ──────────────────────────────────────────────────
+	if *keyFile == "" {
+		fmt.Fprintln(os.Stderr,
+			"error: -key is required\n\nExample:\n"+
+				"  go run ./cmd/chat -key ./keys/ed1 -whitelist ./keys/ -room <hex>")
+		os.Exit(1)
+	}
+	pubKey, privKey, err := loadKeyPair(*keyFile)
+	must(err, "load identity key from "+*keyFile)
+	logErr("Identity key: %s (from %s)", hex.EncodeToString(pubKey), *keyFile)
 
-	// ── 1. Generate identity ─────────────────────────────────────────────────
-	printErr("=== SGTP Chat ===")
-	printErr("Generating ed25519 identity …")
+	// ── 2. Build whitelist from directory ─────────────────────────────────────
+	whitelist := make(map[[32]byte]struct{})
+	addKey(whitelist, pubKey) // always trust ourselves
 
-	pubKey, privKey, err := collectPeerKeyPair(stdin)
-	must(err, "generate ed25519")
-
-	myUUID := newUUID()
-	roomID := newUUID()
-
-	wlist, err := buildWhitelist([]string{
-		"AAAAC3NzaC1lZDI1NTE5AAAAIHIfJYPmiTSuS/fvlV+s2BnUaulkTrRJUNz8D2WYhtnf",
-		"AAAAC3NzaC1lZDI1NTE5AAAAIBEH5TJGcAv4W6tngWspw06jhD95iwSqRRO6vSW7gAMT",
-		"AAAAC3NzaC1lZDI1NTE5AAAAICwn08JpI/ATboTg6HB7g0rU4sgI6OTne7t6+Tkk7RAh",
-	})
-
-	if err != nil {
-		panic(fmt.Sprintf("error while to building whitelist: %s", err.Error()))
+	if *whitelistDir != "" {
+		loaded, skipped := loadWhitelistDir(*whitelistDir, whitelist)
+		logErr("")
+		logErr("Whitelist directory: %s", *whitelistDir)
+		if len(loaded) == 0 {
+			logErr("  (no valid ed25519 public keys found)")
+		} else {
+			logErr("  Loaded %d key(s):", len(loaded))
+			for _, name := range loaded {
+				logErr("    ✓ %s", name)
+			}
+		}
+		if len(skipped) > 0 {
+			logErr("  Skipped %d file(s) (not a valid ed25519 public key):", len(skipped))
+			for _, name := range skipped {
+				logErr("    – %s", name)
+			}
+		}
+		logErr("")
+	} else {
+		logErr("WARNING: no -whitelist specified — only your own key is trusted")
 	}
 
-	// Print to stdout so the user can copy-paste to the peer.
-	fmt.Printf("─── Share with your peer ───────────────────────────────────────\n")
-	fmt.Printf("UUID  : %s\n", hexStr(myUUID[:]))
-	fmt.Printf("Room  : %s\n", hexStr(roomID[:]))
-	fmt.Printf("PUBKEY: %s\n", hexStr(pubKey))
-	fmt.Printf("────────────────────────────────────────────────────────────────\n\n")
+	// ── 3. Room UUID ──────────────────────────────────────────────────────────
+	var roomID [16]byte
+	if *roomHex != "" {
+		clean := strings.ReplaceAll(*roomHex, "-", "")
+		b, err := hex.DecodeString(clean)
+		if err != nil || len(b) != 16 {
+			fmt.Fprintf(os.Stderr, "error: invalid -room %q (need 32 hex chars)\n", *roomHex)
+			os.Exit(1)
+		}
+		copy(roomID[:], b)
+		logErr("Room UUID: %s (from -room)", hex.EncodeToString(roomID[:]))
+	} else {
+		roomID = randomUUID()
+		fmt.Printf("\n")
+		fmt.Printf("┌─────────────────────────────────────────────────────────────┐\n")
+		fmt.Printf("│  New room created. Share this UUID with your peers:         │\n")
+		fmt.Printf("│                                                             │\n")
+		fmt.Printf("│  %s  │\n", hex.EncodeToString(roomID[:]))
+		fmt.Printf("│                                                             │\n")
+		fmt.Printf("│  -room %s  │\n", hex.EncodeToString(roomID[:]))
+		fmt.Printf("└─────────────────────────────────────────────────────────────┘\n")
+		fmt.Printf("\n")
+	}
 
-	// ── 2. Collect peer identity ─────────────────────────────────────────────
-	roomID = collectPeerIdentity(stdin)
+	myUUID := randomUUID()
+	logErr("Client UUID: %s", hex.EncodeToString(myUUID[:]))
 
-	// ── 3. Derive room ID (commutative XOR of the two UUIDs) ─────────────────
-
-	// ── 4. Build client ──────────────────────────────────────────────────────
+	// ── 4. Build client ───────────────────────────────────────────────────────
+	store := newMemStore()
 	c, err := sgtp.New(sgtp.Config{
-		ServerAddr: *serverAddr,
-		RoomUUID:   roomID,
-		UUID:       myUUID,
-		PrivateKey: privKey,
-		PublicKey:  pubKey,
-		Whitelist:  wlist,
-		InfoDelay:  *infoDelay,
+		ServerAddr:   *serverAddr,
+		RoomUUID:     roomID,
+		UUID:         myUUID,
+		PrivateKey:   privKey,
+		PublicKey:    pubKey,
+		Whitelist:    whitelist,
+		InfoDelay:    *infoDelay,
+		HistoryStore: store,
 	})
 	must(err, "create client")
 
-	// ── 5. Event loop ────────────────────────────────────────────────────────
-	ckReady := make(chan struct{}, 1)
-	go runEventLoop(c, ckReady, privKey)
+	// ── 5. Background loops ───────────────────────────────────────────────────
+	ckReady     := make(chan struct{}, 1)
+	historyDone := make(chan struct{})
 
-	// ── 6. Message display ───────────────────────────────────────────────────
-	go func() {
-		for msg := range c.Messages() {
-			ts := msg.ReceivedAt.Format("15:04:05")
-			// \r clears any partial "> " prompt before printing.
-			fmt.Printf("\r\033[2K[%s] peer> %s\n> ", ts, msg.Data)
-		}
-	}()
+	go runEventLoop(c, ckReady, historyDone)
+	go runMessageLoop(c)
 
-	// ── 7. Connect ───────────────────────────────────────────────────────────
-	printErr("Connecting to %s …", *serverAddr)
+	// ── 6. Connect ────────────────────────────────────────────────────────────
+	logErr("Connecting to %s …", *serverAddr)
 	must(c.Connect(), "connect")
-	printErr("Connected. Waiting for peer to join …")
+	logErr("Connected. Waiting for peers and Chat Key …")
 
-	// ── 8. Wait for Chat Key ─────────────────────────────────────────────────
-	printErr("(waiting for Chat Key — the master will issue it automatically)")
-	select {
-	case <-ckReady:
-		fmt.Println("\n✓ Chat Key received. You can type now.")
-	case <-time.After(60 * time.Second):
-		log.Fatal("[FATAL] timeout waiting for Chat Key (60s)")
-	}
-
-	// ── 9. Handle Ctrl+C ─────────────────────────────────────────────────────
+	// ── 7. Ctrl+C ─────────────────────────────────────────────────────────────
 	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		<-sig
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+		<-ch
 		fmt.Println("\nDisconnecting …")
 		_ = c.Disconnect()
 		os.Exit(0)
 	}()
 
-	// ── 10. Message input loop ────────────────────────────────────────────────
-	fmt.Println("Commands: /quit to exit, /peers to list peers")
+	// ── 8. Wait for Chat Key ──────────────────────────────────────────────────
+	fmt.Println("(waiting for Chat Key …)")
+	select {
+	case <-ckReady:
+	case <-time.After(120 * time.Second):
+		log.Fatal("[FATAL] timeout waiting for Chat Key (120 s)")
+	}
+
+	// ── 9. Wait for history replay ────────────────────────────────────────────
+	select {
+	case <-historyDone:
+	case <-time.After(10 * time.Second):
+	}
+
+	// ── 10. Input loop ────────────────────────────────────────────────────────
+	fmt.Println("─── ready ─── Commands: /quit  /peers  /master  /history")
+	stdin := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("> ")
 		line, err := stdin.ReadString('\n')
 		if err != nil {
-			break // EOF (Ctrl+D)
+			break
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
@@ -144,22 +188,30 @@ func main() {
 		switch line {
 		case "/quit", "/exit":
 			goto done
+
 		case "/peers":
 			peers := c.KnownPeers()
 			if len(peers) == 0 {
 				fmt.Println("  (no peers)")
 			}
 			for _, p := range peers {
-				fmt.Printf("  • %s\n", hexStr(p.UUID[:]))
+				fmt.Printf("  • %s\n", hex.EncodeToString(p.UUID[:]))
 			}
-			continue
+
 		case "/master":
 			fmt.Printf("  IsMaster: %v\n", c.IsMaster())
-			continue
-		}
 
-		if _, err := c.SendMessage([]byte(line)); err != nil {
-			fmt.Fprintf(os.Stderr, "[ERR] send: %v\n", err)
+		case "/history":
+			go fetchAndDisplayHistory(c, false)
+
+		default:
+			if strings.HasPrefix(line, "/") {
+				fmt.Println("  unknown command. Use: /quit /peers /master /history")
+				continue
+			}
+			if _, err := c.SendMessage([]byte(line)); err != nil {
+				fmt.Fprintf(os.Stderr, "[ERR] send: %v\n", err)
+			}
 		}
 	}
 
@@ -168,187 +220,286 @@ done:
 	_ = c.Disconnect()
 }
 
+// ─── Whitelist loader ─────────────────────────────────────────────────────────
+
+// loadWhitelistDir scans dir, tries to parse each file as an ed25519 public
+// key (OpenSSH or raw 32 bytes). Adds valid keys to wl.
+// Returns (loaded filenames, skipped filenames).
+func loadWhitelistDir(dir string, wl map[[32]byte]struct{}) (loaded, skipped []string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		logErr("WARNING: cannot read whitelist dir %q: %v", dir, err)
+		return
+	}
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		path := filepath.Join(dir, name)
+
+		pub, err := tryLoadPubKey(path)
+		if err != nil {
+			skipped = append(skipped, name)
+			continue
+		}
+		addKey(wl, pub)
+		loaded = append(loaded, name)
+	}
+	return
+}
+
+// tryLoadPubKey attempts to load an ed25519 public key from path.
+// Tries OpenSSH public key format first, then raw 32-byte format.
+// Returns error if the file is not a valid ed25519 public key.
+func tryLoadPubKey(path string) ([]byte, error) {
+	// OpenSSH public key (authorized_keys line): "ssh-ed25519 AAAA… comment"
+	pub, _, err := protocol.LoadEd25519FromOpenSSHFile(path)
+	if err == nil && len(pub) == 32 {
+		return pub, nil
+	}
+
+	// Raw 32-byte public key file.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 32 {
+		return data, nil
+	}
+
+	return nil, fmt.Errorf("not a valid ed25519 public key")
+}
+
 // ─── Event loop ───────────────────────────────────────────────────────────────
 
-func runEventLoop(c *sgtp.Client, ckReady chan<- struct{}, _ ed25519.PrivateKey) {
+func runEventLoop(c *sgtp.Client, ckReady chan<- struct{}, historyDone chan<- struct{}) {
+	histTriggered  := false
+	histDoneClosed := false
+
+	closeHistDone := func() {
+		if !histDoneClosed {
+			histDoneClosed = true
+			close(historyDone)
+		}
+	}
+
 	for ev := range c.Events() {
 		switch ev.Kind {
 		case sgtp.EventPeerJoined:
-			printErr("[+] peer joined: %s", hexStr(ev.PeerUUID[:]))
-			fmt.Printf("\r\033[2K[+] peer joined: %s\n> ", hexShort(ev.PeerUUID[:]))
-
-			// If we are the master, issue a Chat Key to this peer.
-			if c.IsMaster() {
-				printErr("[master] we are master — issuing Chat Key")
-				go func() {
-					// Brief delay so the peer's PONG finishes processing.
-					time.Sleep(100 * time.Millisecond)
-					if err := c.IssueChatKeyToAll(); err != nil {
-						printErr("[master] IssueChatKey error: %v", err)
-					}
-				}()
-			}
+			logErr("[+] peer joined: %s", hex.EncodeToString(ev.PeerUUID[:]))
+			clearLine()
+			fmt.Printf("[+] peer joined: %s…\n> ", hex.EncodeToString(ev.PeerUUID[:8]))
 
 		case sgtp.EventPeerLeft:
-			printErr("[-] peer left: %s", hexShort(ev.PeerUUID[:]))
-			fmt.Printf("\r\033[2K[-] peer left: %s\n> ", hexShort(ev.PeerUUID[:]))
+			logErr("[-] peer left: %s", hex.EncodeToString(ev.PeerUUID[:]))
+			clearLine()
+			fmt.Printf("[-] peer left: %s…\n> ", hex.EncodeToString(ev.PeerUUID[:8]))
 
 		case sgtp.EventPeerKicked:
-			printErr("[!] peer kicked: %s", hexShort(ev.PeerUUID[:]))
-			fmt.Printf("\r\033[2K[!] peer kicked: %s\n> ", hexShort(ev.PeerUUID[:]))
+			logErr("[!] peer kicked: %s", hex.EncodeToString(ev.PeerUUID[:]))
+			clearLine()
+			fmt.Printf("[!] peer kicked: %s…\n> ", hex.EncodeToString(ev.PeerUUID[:8]))
 
 		case sgtp.EventChatKeyRotated:
-			printErr("[*] Chat Key active (epoch updated)")
+			logErr("[*] Chat Key rotated")
 			select {
 			case ckReady <- struct{}{}:
 			default:
 			}
+			if !histTriggered {
+				histTriggered = true
+				if len(c.KnownPeers()) == 0 {
+					closeHistDone()
+				} else {
+					go func() {
+						fetchAndDisplayHistory(c, true)
+						closeHistDone()
+					}()
+				}
+			}
 
 		case sgtp.EventMessageFailed:
-			printErr("[!] message %s rejected — resend after CK rotation", hexShort(ev.MessageUUID[:]))
-			fmt.Printf("\r\033[2K[!] your message was rejected — please resend\n> ")
+			logErr("[!] message %s rejected — resend after CK rotation",
+				hex.EncodeToString(ev.MessageUUID[:8]))
+			clearLine()
+			fmt.Print("[!] your message was rejected — please resend\n> ")
 
 		case sgtp.EventError:
-			printErr("[ERR] %v", ev.Err)
+			logErr("[ERR] %v", ev.Err)
 		}
+	}
+
+	closeHistDone()
+}
+
+// ─── Message display ──────────────────────────────────────────────────────────
+
+func runMessageLoop(c *sgtp.Client) {
+	for msg := range c.Messages() {
+		displayMessage(msg, false)
 	}
 }
 
-// ─── Peer identity collection ─────────────────────────────────────────────────
-
-func collectPeerIdentity(r *bufio.Reader) [16]byte {
-	var peerUUID [16]byte
-
-	for {
-		fmt.Print("Enter room UUID   : ")
-		uuidHex := strings.TrimSpace(readLine(r))
-		uuidHex = strings.ReplaceAll(uuidHex, "-", "")
-		b, err := hex.DecodeString(uuidHex)
-		if err != nil || len(b) != 16 {
-			fmt.Fprintln(os.Stderr, "  ✗ must be 32 hex characters (16 bytes). Try again.")
-			continue
-		}
-		copy(peerUUID[:], b)
-		break
+func displayMessage(msg sgtp.InboundMessage, isHistory bool) {
+	ts := msg.ReceivedAt.Format("15:04:05")
+	sender := hex.EncodeToString(msg.SenderUUID[:4])
+	prefix := ""
+	if isHistory {
+		prefix = "~"
 	}
-
-	return peerUUID
+	clearLine()
+	fmt.Printf("[%s%s] %s…> %s\n", prefix, ts, sender, msg.Data)
 }
 
-// ─── Utilities ───────────────────────────────────────────────────────────────
-
-func readLine(r *bufio.Reader) string {
-	line, _ := r.ReadString('\n')
-	return strings.TrimRight(line, "\r\n")
-}
-
-func hexStr(b []byte) string   { return hex.EncodeToString(b) }
-func hexShort(b []byte) string { return hex.EncodeToString(b[:4]) + "…" }
-
-func printErr(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
-}
-
-func newUUID() [16]byte {
-	var u [16]byte
-	_, err := rand.Read(u[:])
+func fetchAndDisplayHistory(c *sgtp.Client, isAuto bool) {
+	ch, err := c.RequestHistory()
 	if err != nil {
-		log.Fatalf("rand.Read: %v", err)
+		logErr("[ERR] RequestHistory: %v", err)
+		return
 	}
-	u[6] = (u[6] & 0x0f) | 0x40 // version 4
-	u[8] = (u[8] & 0x3f) | 0x80 // variant RFC 4122
+
+	var msgs []sgtp.InboundMessage
+	for batch := range ch {
+		if batch.IsLast {
+			break
+		}
+		for _, raw := range batch.ExtractMessages() {
+			msg, err := c.DecryptMessageFrame(raw)
+			if err != nil {
+				logErr("[history] skip frame: %v", err)
+				continue
+			}
+			msgs = append(msgs, msg)
+		}
+	}
+
+	if len(msgs) == 0 {
+		if !isAuto {
+			fmt.Println("  (no history)")
+			fmt.Print("> ")
+		}
+		return
+	}
+
+	clearLine()
+	fmt.Printf("─── history: %d message(s) ─────────────────────────────────────\n", len(msgs))
+	for _, msg := range msgs {
+		displayMessage(msg, true)
+	}
+	fmt.Printf("─── end of history ─────────────────────────────────────────────\n> ")
+}
+
+// ─── In-memory HistoryStore ───────────────────────────────────────────────────
+
+type memStore struct {
+	mu      sync.RWMutex
+	records []sgtp.HistoryRecord
+}
+
+func newMemStore() *memStore { return &memStore{} }
+
+func (s *memStore) Count() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return uint64(len(s.records))
+}
+
+func (s *memStore) Fetch(offset, limit uint64) []sgtp.HistoryRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	total := uint64(len(s.records))
+	if offset >= total {
+		return nil
+	}
+	end := total
+	if limit > 0 && offset+limit < end {
+		end = offset + limit
+	}
+	result := make([]sgtp.HistoryRecord, end-offset)
+	for i, r := range s.records[offset:end] {
+		cp := sgtp.HistoryRecord{
+			SenderUUID:  r.SenderUUID,
+			MessageUUID: r.MessageUUID,
+			Timestamp:   r.Timestamp,
+			Nonce:       r.Nonce,
+		}
+		cp.Data = make([]byte, len(r.Data))
+		copy(cp.Data, r.Data)
+		result[i] = cp
+	}
+	return result
+}
+
+func (s *memStore) Append(r sgtp.HistoryRecord) {
+	cp := sgtp.HistoryRecord{
+		SenderUUID:  r.SenderUUID,
+		MessageUUID: r.MessageUUID,
+		Timestamp:   r.Timestamp,
+		Nonce:       r.Nonce,
+	}
+	cp.Data = make([]byte, len(r.Data))
+	copy(cp.Data, r.Data)
+	s.mu.Lock()
+	s.records = append(s.records, cp)
+	s.mu.Unlock()
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+func loadKeyPair(path string) (pub []byte, priv []byte, err error) {
+	pub, priv, err = protocol.LoadEd25519FromOpenSSHFile(path)
+	if err == nil && priv != nil {
+		return
+	}
+	pub, priv, err = protocol.LoadEd25519FromFileRaw(path)
+	return
+}
+
+func addKey(wl map[[32]byte]struct{}, pub []byte) {
+	var arr [32]byte
+	copy(arr[:], pub)
+	wl[arr] = struct{}{}
+}
+
+func randomUUID() [16]byte {
+	return uuidV7()
+}
+
+// uuidV7 generates a UUID version 7 (RFC 9562).
+// The 48 high bits carry the current Unix timestamp in milliseconds,
+// so lexicographic order matches time order.  This guarantees that a
+// client joining later always gets a larger UUID and therefore never
+// accidentally becomes master (master = smallest UUID).
+func uuidV7() [16]byte {
+	var u [16]byte
+	f, err := os.Open("/dev/urandom")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	_, _ = f.Read(u[:])
+
+	// Overwrite the top 48 bits with the current timestamp in ms.
+	now := uint64(time.Now().UnixMilli())
+	u[0] = byte(now >> 40)
+	u[1] = byte(now >> 32)
+	u[2] = byte(now >> 24)
+	u[3] = byte(now >> 16)
+	u[4] = byte(now >> 8)
+	u[5] = byte(now)
+
+	// Version 7, variant bits.
+	u[6] = (u[6] & 0x0f) | 0x70
+	u[8] = (u[8] & 0x3f) | 0x80
 	return u
 }
 
+func clearLine() { fmt.Print("\r\033[2K") }
+func logErr(format string, args ...any) { fmt.Fprintf(os.Stderr, format+"\n", args...) }
 func must(err error, msg string) {
 	if err != nil {
 		log.Fatalf("[FATAL] %s: %v", msg, err)
-	}
-}
-
-func buildWhitelist(keysSSH []string) (map[[32]byte]struct{}, error) {
-	whitelist := make(map[[32]byte]struct{}, len(keysSSH))
-
-	for i, keyStr := range keysSSH {
-		// Убираем возможные префиксы типа "ssh-ed25519 " и комментарии
-		parts := strings.Fields(keyStr)
-		var keyBlob string
-		if len(parts) >= 2 {
-			keyBlob = parts[1] // берём base64-часть
-		} else {
-			keyBlob = keyStr
-		}
-
-		// Парсим как SSH public key
-		pubKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte("ssh-ed25519 " + keyBlob))
-		if err != nil {
-			return nil, fmt.Errorf("invalid SSH key at index %d: %w", i, err)
-		}
-
-		// Извлекаем сырой ed25519.PublicKey
-		rawKey, ok := pubKey.(ssh.CryptoPublicKey).CryptoPublicKey().(ed25519.PublicKey)
-		if !ok {
-			return nil, fmt.Errorf("key at index %d is not ed25519", i)
-		}
-
-		// Конвертируем []byte -> [32]byte
-		if len(rawKey) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("invalid key length at index %d", i)
-		}
-		var keyArray [32]byte
-		copy(keyArray[:], rawKey)
-		whitelist[keyArray] = struct{}{}
-	}
-	return whitelist, nil
-}
-
-func collectPeerPublicKey(r *bufio.Reader) (ed25519.PublicKey, error) {
-	for {
-		fmt.Print("Enter peer public key file: ")
-		filename := strings.TrimSpace(readLine(r))
-
-		if filename == "" {
-			fmt.Fprintln(os.Stderr, "  ✗ filename cannot be empty. Try again.")
-			continue
-		}
-
-		pubKey, _, err := protocol.LoadEd25519FromOpenSSHFile(filename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ failed to load key from %s: %v. Try again.\n", filename, err)
-			continue
-		}
-
-		if len(pubKey) != ed25519.PublicKeySize {
-			fmt.Fprintln(os.Stderr, "  ✗ invalid public key size. Try again.")
-			continue
-		}
-
-		return pubKey, nil
-	}
-}
-func collectPeerKeyPair(r *bufio.Reader) (ed25519.PublicKey, ed25519.PrivateKey, error) {
-	for {
-		fmt.Print("Enter peer key file: ")
-		filename := strings.TrimSpace(readLine(r))
-
-		if filename == "" {
-			fmt.Fprintln(os.Stderr, "  ✗ filename cannot be empty. Try again.")
-			continue
-		}
-
-		// Сначала пробуем raw-формат (твоя функция из protocol)
-		pubKey, privKey, err := protocol.LoadEd25519FromFileRaw(filename)
-		if err == nil {
-			return pubKey, privKey, nil
-		}
-
-		// Потом пробуем OpenSSH-формат
-		pubKey, privKey, err = protocol.LoadEd25519FromOpenSSHFile(filename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  ✗ failed to load keys: %v. Try again.\n", err)
-			continue
-		}
-
-		return pubKey, privKey, nil
 	}
 }

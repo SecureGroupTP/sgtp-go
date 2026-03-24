@@ -9,29 +9,31 @@ import (
 
 // ─── CHAT_KEY handler (§4) ────────────────────────────────────────────────────
 
-// handleChatKey decrypts the new Chat Key sent by the master, stores it, resets
-// the nonce counter, and sends CHAT_KEY_ACK.
+// handleChatKey decrypts the new Chat Key sent by the master.
+// Wire format: epoch (8B plaintext) || ciphertext-of-key (encrypted with
+// shared_secret, nonce=epoch).
 func (c *Client) handleChatKey(p *protocol.ChatKey) error {
 	senderID := p.GetHeader().SenderUUID
-	logInfo("session", "CHAT_KEY from master=%s", fmtUUID(senderID))
+	logInfo("session", "CHAT_KEY from master=%s epoch=%d", fmtUUID(senderID), p.Epoch)
 
 	c.peersMu.RLock()
 	peer, ok := c.peers[senderID]
 	c.peersMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: CHAT_KEY from unknown peer %s — no shared secret", fmtUUID(senderID))
+		return fmt.Errorf("session: CHAT_KEY from unknown peer %s — no shared secret", fmtUUID(senderID))
 	}
 
-	// Control-plane frames use nonce=0 (one-time use per DH session).
-	plain, err := protocol.Decrypt(peer.SharedSecret, 0, p.Ciphertext)
+	// Nonce = epoch (unique per rotation, strictly monotonic).
+	plain, err := protocol.Decrypt(peer.SharedSecret, p.Epoch, p.Ciphertext)
 	if err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: CHAT_KEY decrypt: %w", err)
+		return fmt.Errorf("session: CHAT_KEY decrypt epoch=%d: %w", p.Epoch, err)
 	}
 	if err := p.DecodePlaintext(plain); err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: CHAT_KEY decode: %w", err)
+		return fmt.Errorf("session: CHAT_KEY decode: %w", err)
 	}
 
 	c.ckMu.Lock()
+	isFirst := !c.ckReady
 	c.chatKey = p.Key
 	c.chatKeyEpoch = p.Epoch
 	c.ckReady = true
@@ -42,7 +44,12 @@ func (c *Client) handleChatKey(p *protocol.ChatKey) error {
 
 	logInfo("session", "chat key updated epoch=%d", p.Epoch)
 
-	// Acknowledge.
+	// Mark first CK received (used for auto-history fetch).
+	if isFirst {
+		c.firstCKDone.Store(true)
+	}
+
+	// Send CHAT_KEY_ACK.
 	ack := &protocol.ChatKeyACK{}
 	h := ack.GetHeader()
 	h.RoomUUID = c.cfg.RoomUUID
@@ -50,7 +57,7 @@ func (c *Client) handleChatKey(p *protocol.ChatKey) error {
 	h.SenderUUID = c.uuid
 	h.Timestamp = protocol.NowMillis()
 	if err := c.sendSigned(ack.Marshal); err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: send CHAT_KEY_ACK: %w", err)
+		return fmt.Errorf("session: send CHAT_KEY_ACK: %w", err)
 	}
 	logDebug("session", "CHAT_KEY_ACK sent to master=%s", fmtUUID(senderID))
 
@@ -79,7 +86,7 @@ func (c *Client) handleMessage(raw []byte, p *protocol.Message) error {
 
 	// Verify authenticity.
 	if !protocol.Verify(peer.PubKeyEd25519, raw[:len(raw)-protocol.SignatureSize], p.GetSignature()) {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: MESSAGE signature invalid from peer=%s", fmtUUID(senderID))
+		return fmt.Errorf("session: MESSAGE signature invalid from peer=%s", fmtUUID(senderID))
 	}
 
 	c.ckMu.RLock()
@@ -88,10 +95,21 @@ func (c *Client) handleMessage(raw []byte, p *protocol.Message) error {
 
 	plain, err := protocol.Decrypt(ck, p.Nonce, p.Ciphertext)
 	if err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: MESSAGE decrypt nonce=%d: %w", p.Nonce, err)
+		return fmt.Errorf("session: MESSAGE decrypt nonce=%d: %w", p.Nonce, err)
 	}
 
 	logDebug("session", "MESSAGE decrypted from=%s nonce=%d len=%d", fmtUUID(senderID), p.Nonce, len(plain))
+
+	// Persist decoded record to history store.
+	if c.cfg.HistoryStore != nil {
+		c.cfg.HistoryStore.Append(HistoryRecord{
+			SenderUUID:  senderID,
+			MessageUUID: p.MessageUUID,
+			Timestamp:   p.GetHeader().Timestamp,
+			Nonce:       p.Nonce,
+			Data:        plain,
+		})
+	}
 
 	msg := InboundMessage{
 		SenderUUID:  senderID,
@@ -103,7 +121,7 @@ func (c *Client) handleMessage(raw []byte, p *protocol.Message) error {
 	case c.msgCh <- msg:
 	default:
 		logWarn("session", "inbound message buffer full — dropping message from=%s", fmtUUID(senderID))
-		c.pushEvent(Event{Kind: EventError, Err: fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: inbound buffer full, message dropped")})
+		c.pushEvent(Event{Kind: EventError, Err: fmt.Errorf("session: inbound buffer full, message dropped")})
 	}
 	return nil
 }
@@ -120,15 +138,17 @@ func (c *Client) handleMessageFailed(p *protocol.MessageFailed) error {
 	peer, ok := c.peers[senderID]
 	c.peersMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: MESSAGE_FAILED from unknown peer %s", fmtUUID(senderID))
+		return fmt.Errorf("session: MESSAGE_FAILED from unknown peer %s", fmtUUID(senderID))
 	}
 
-	plain, err := protocol.Decrypt(peer.SharedSecret, 0, p.Ciphertext)
+	// Use the nonce from the frame timestamp (same scheme as sendStatusTo).
+	nonce := p.GetHeader().Timestamp
+	plain, err := protocol.Decrypt(peer.SharedSecret, nonce, p.Ciphertext)
 	if err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: MESSAGE_FAILED decrypt: %w", err)
+		return fmt.Errorf("session: MESSAGE_FAILED decrypt: %w", err)
 	}
 	if len(plain) < 16 {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: MESSAGE_FAILED plaintext too short (%d bytes)", len(plain))
+		return fmt.Errorf("session: MESSAGE_FAILED plaintext too short (%d bytes)", len(plain))
 	}
 	var msgUUID [16]byte
 	copy(msgUUID[:], plain[0:16])
@@ -144,14 +164,13 @@ func (c *Client) handleMessageFailed(p *protocol.MessageFailed) error {
 	h.SenderUUID = c.uuid
 	h.Timestamp = protocol.NowMillis()
 	if err := c.sendSigned(ack.Marshal); err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: send MESSAGE_FAILED_ACK: %w", err)
+		return fmt.Errorf("session: send MESSAGE_FAILED_ACK: %w", err)
 	}
 	return nil
 }
 
-// ─── STATUS handler (§STATUS) ────────────────────────────────────────────────
+// ─── STATUS handler ──────────────────────────────────────────────────────────
 
-// handleStatus decrypts and logs a STATUS frame from the master.
 func (c *Client) handleStatus(p *protocol.Status) error {
 	senderID := p.GetHeader().SenderUUID
 	logInfo("session", "STATUS from=%s", fmtUUID(senderID))
@@ -160,12 +179,14 @@ func (c *Client) handleStatus(p *protocol.Status) error {
 	peer, ok := c.peers[senderID]
 	c.peersMu.RUnlock()
 	if !ok {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: STATUS from unknown peer %s", fmtUUID(senderID))
+		return fmt.Errorf("session: STATUS from unknown peer %s", fmtUUID(senderID))
 	}
 
-	plain, err := protocol.Decrypt(peer.SharedSecret, 0, p.Ciphertext)
+	// Nonce is the frame timestamp (matches sendStatusTo).
+	nonce := p.GetHeader().Timestamp
+	plain, err := protocol.Decrypt(peer.SharedSecret, nonce, p.Ciphertext)
 	if err != nil {
-		return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: STATUS decrypt: %w", err)
+		return fmt.Errorf("session: STATUS decrypt: %w", err)
 	}
 	if err := p.DecodePlaintext(plain); err != nil {
 		return err
@@ -174,14 +195,15 @@ func (c *Client) handleStatus(p *protocol.Status) error {
 	logWarn("session", "STATUS code=%d msg=%q", p.StatusCode, p.StatusMsg)
 	c.pushEvent(Event{
 		Kind: EventError,
-		Err:  fmt.Errorf("github.com/SecureGroupTP/sgtp-go/session: STATUS %d from master: %s", p.StatusCode, p.StatusMsg),
+		Err:  fmt.Errorf("session: STATUS %d from master: %s", p.StatusCode, p.StatusMsg),
 	})
 	return nil
 }
 
 // ─── FIN handler (§7.1) ───────────────────────────────────────────────────────
 
-// handleFIN removes the departing peer from our state.
+// handleFIN removes the departing peer from state.
+// If we are the master, we rotate the CK for remaining participants (§7.1).
 func (c *Client) handleFIN(p *protocol.FIN) error {
 	uid := p.GetHeader().SenderUUID
 	logInfo("session", "FIN from peer=%s", fmtUUID(uid))
@@ -191,12 +213,21 @@ func (c *Client) handleFIN(p *protocol.FIN) error {
 	c.peersMu.Unlock()
 
 	c.pushEvent(Event{Kind: EventPeerLeft, PeerUUID: uid})
+
+	// Master: rotate CK so the departing peer can no longer read (§7.1).
+	if c.IsMaster() {
+		logInfo("master", "peer left — rotating CK for remaining participants")
+		go func() {
+			if err := c.rotateChatKey(); err != nil {
+				logError("master", "post-FIN CK rotation: %v", err)
+			}
+		}()
+	}
 	return nil
 }
 
 // ─── KICKED handler (§7.2) ────────────────────────────────────────────────────
 
-// handleKicked removes the kicked peer from state.
 func (c *Client) handleKicked(p *protocol.Kicked) error {
 	logInfo("session", "KICKED target=%s by master=%s", fmtUUID(p.TargetUUID), fmtUUID(p.GetHeader().SenderUUID))
 

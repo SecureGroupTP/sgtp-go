@@ -2,6 +2,7 @@ package client
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/SecureGroupTP/sgtp-go/protocol"
 )
@@ -10,10 +11,14 @@ import (
 // HistoryBatch values are delivered. The channel is closed after the
 // end-of-stream batch (IsLast == true) is received.
 //
-// Only one history request may be in flight at a time. Starting a second
-// one replaces the first channel.
+// Only one history request may be in flight at a time.
 func (c *Client) RequestHistory() (<-chan HistoryBatch, error) {
 	logInfo("history", "sending HSIR broadcast")
+
+	// Reset the HSI accumulation map.
+	c.hsiMu.Lock()
+	c.hsiResult = make(map[[16]byte]uint64)
+	c.hsiMu.Unlock()
 
 	pkt := &protocol.HSIR{}
 	h := pkt.GetHeader()
@@ -22,27 +27,91 @@ func (c *Client) RequestHistory() (<-chan HistoryBatch, error) {
 	h.SenderUUID = c.uuid
 	h.Timestamp = protocol.NowMillis()
 	if err := c.sendSigned(pkt.Marshal); err != nil {
-		return nil, fmt.Errorf("github.com/SecureGroupTP/sgtp-go/history: send HSIR: %w", err)
+		return nil, fmt.Errorf("history: send HSIR: %w", err)
 	}
 
-	ch := make(chan HistoryBatch, 64)
+	ch := make(chan HistoryBatch, 128)
 	c.histMu.Lock()
 	c.histCh = ch
 	c.histMu.Unlock()
 
-	logDebug("history", "HSIR sent, waiting for HSRA batches")
+	// Give peers 2 s to reply with HSI, then pick the richest and send HSR.
+	go c.awaitHSIThenRequest()
+
+	logDebug("history", "HSIR sent, waiting for HSI responses")
 	return ch, nil
+}
+
+// awaitHSIThenRequest waits for HSI replies to arrive, picks the peer with the
+// most messages, and sends HSR to them.
+func (c *Client) awaitHSIThenRequest() {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+	case <-c.done:
+		return
+	}
+
+	c.hsiMu.Lock()
+	results := c.hsiResult
+	c.hsiResult = make(map[[16]byte]uint64)
+	c.hsiMu.Unlock()
+
+	if len(results) == 0 {
+		logInfo("history", "no HSI responses received — closing history channel")
+		c.closeHistCh()
+		return
+	}
+
+	// Pick the peer with the maximum message count.
+	var bestPeer [16]byte
+	var bestCount uint64
+	for uid, count := range results {
+		if count > bestCount {
+			bestCount = count
+			bestPeer = uid
+		}
+	}
+
+	logInfo("history", "best peer=%s with %d messages — sending HSR", fmtUUID(bestPeer), bestCount)
+
+	hsr := &protocol.HSR{Offset: 0, Limit: 0} // 0 limit = all messages
+	h := hsr.GetHeader()
+	h.RoomUUID = c.cfg.RoomUUID
+	h.ReceiverUUID = bestPeer
+	h.SenderUUID = c.uuid
+	h.Timestamp = protocol.NowMillis()
+	if err := c.sendSigned(hsr.Marshal); err != nil {
+		logError("history", "send HSR: %v", err)
+		c.closeHistCh()
+	}
+}
+
+func (c *Client) closeHistCh() {
+	c.histMu.Lock()
+	ch := c.histCh
+	c.histCh = nil
+	c.histMu.Unlock()
+	if ch != nil {
+		close(ch)
+	}
 }
 
 // ─── HSI handler ──────────────────────────────────────────────────────────────
 
-// handleHSI logs the message count reported by a peer in response to HSIR.
-// A richer implementation would track counts per peer and pick the richest one
-// before issuing HSR.
+// handleHSI records the message count from a peer responding to our HSIR.
 func (c *Client) handleHSI(p *protocol.HSI) error {
 	senderID := p.GetHeader().SenderUUID
 	logInfo("history", "HSI from=%s count=%d", fmtUUID(senderID), p.MessageCount)
-	// Future: select the peer with the highest count and send HSR.
+
+	c.hsiMu.Lock()
+	if c.hsiResult == nil {
+		c.hsiResult = make(map[[16]byte]uint64)
+	}
+	c.hsiResult[senderID] = p.MessageCount
+	c.hsiMu.Unlock()
 	return nil
 }
 
@@ -60,7 +129,6 @@ func (c *Client) handleHSRA(p *protocol.HSRA) error {
 	}
 
 	batch := historyBatchFromHSRA(p)
-
 	logDebug("history", "HSRA batch=%d messages=%d isLast=%v",
 		batch.BatchNumber, batch.MessageCount, batch.IsLast)
 
@@ -75,7 +143,7 @@ func (c *Client) handleHSRA(p *protocol.HSRA) error {
 		c.histCh = nil
 		c.histMu.Unlock()
 		close(ch)
-		logInfo("history", "history stream complete, total batches=%d", batch.BatchNumber)
+		logInfo("history", "history stream complete, total=%d msgs", batch.BatchNumber)
 	}
 	return nil
 }

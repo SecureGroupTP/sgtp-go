@@ -221,7 +221,7 @@ func (p *Pong) Marshal() []byte {
 }
 
 func unmarshalPong(h *Header, payload, sig []byte) (*Pong, error) {
-	if len(payload) < 32 {
+	if len(payload) < 64 {
 		return nil, fmt.Errorf("sgtp: PONG payload too short")
 	}
 	p := &Pong{}
@@ -341,40 +341,47 @@ type ChatKey struct {
 	Ciphertext []byte
 }
 
+// Wire format: [8B epoch plaintext] [ciphertext of key only, nonce=epoch]
+// This avoids AEAD nonce reuse across CK rotations: each rotation uses a
+// strictly larger epoch, so the (shared_secret, nonce) pair is never repeated.
 func (p *ChatKey) Marshal() []byte {
 	p.Hdr.Version = ProtocolVersion
 	p.Hdr.PacketType = TypeChatKey
-	p.Hdr.PayloadLen = uint32(len(p.Ciphertext))
+	p.Hdr.PayloadLen = uint32(8 + len(p.Ciphertext))
 	buf := MarshalHeader(&p.Hdr)
+	eb := make([]byte, 8)
+	binary.BigEndian.PutUint64(eb, p.Epoch)
+	buf = append(buf, eb...)
 	buf = append(buf, p.Ciphertext...)
 	buf = append(buf, p.Signature[:]...)
 	return buf
 }
 
 func unmarshalChatKey(h *Header, payload, sig []byte) (*ChatKey, error) {
+	if len(payload) < 8 {
+		return nil, fmt.Errorf("sgtp: CHAT_KEY payload too short")
+	}
 	p := &ChatKey{}
 	p.Hdr = *h
-	p.Ciphertext = append([]byte{}, payload...)
+	p.Epoch = binary.BigEndian.Uint64(payload[0:8])
+	p.Ciphertext = append([]byte{}, payload[8:]...)
 	copy(p.Signature[:], sig)
 	return p, nil
 }
 
-// DecodePlaintext fills Epoch and Key from decrypted bytes.
+// DecodePlaintext fills Key from decrypted 32 bytes.
 func (p *ChatKey) DecodePlaintext(plain []byte) error {
-	if len(plain) < 40 {
+	if len(plain) < 32 {
 		return fmt.Errorf("sgtp: CHAT_KEY plaintext too short")
 	}
-	p.Epoch = binary.BigEndian.Uint64(plain[0:8])
-	copy(p.Key[:], plain[8:40])
+	copy(p.Key[:], plain[0:32])
 	return nil
 }
 
-// EncodePlaintext returns the 40-byte plaintext to be encrypted.
+// EncodePlaintext returns the 32-byte plaintext (key only) to be encrypted
+// with the epoch as the AEAD nonce.
 func (p *ChatKey) EncodePlaintext() []byte {
-	buf := make([]byte, 40)
-	binary.BigEndian.PutUint64(buf[0:8], p.Epoch)
-	copy(buf[8:40], p.Key[:])
-	return buf
+	return append([]byte{}, p.Key[:]...)
 }
 
 // ─── CHAT_KEY_ACK 0x06 ───────────────────────────────────────────────────────

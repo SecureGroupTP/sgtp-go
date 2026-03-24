@@ -98,6 +98,20 @@ func (c *Client) sendInfoResponse(receiverUUID [16]byte) error {
 	return c.sendSigned(pkt.Marshal)
 }
 
+// sendChatRequest sends CHAT_REQUEST to the master (§4.1).
+// Called by a non-master client after handshaking with all known peers.
+func (c *Client) sendChatRequest(masterID [16]byte, knownUUIDs [][16]byte) error {
+	logInfo("send", "CHAT_REQUEST → master=%s (peers=%d)", fmtUUID(masterID), len(knownUUIDs))
+
+	pkt := &protocol.ChatRequest{UUIDs: knownUUIDs}
+	h := pkt.GetHeader()
+	h.RoomUUID = c.cfg.RoomUUID
+	h.ReceiverUUID = masterID
+	h.SenderUUID = c.uuid
+	h.Timestamp = protocol.NowMillis()
+	return c.sendSigned(pkt.Marshal)
+}
+
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 // randomUUID generates a random RFC 4122 v4 UUID.

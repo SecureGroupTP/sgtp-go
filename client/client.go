@@ -37,11 +37,14 @@ type Client struct {
 	ephPriv [32]byte
 
 	// Per-peer cryptographic state, guarded by peersMu
-	peersMu sync.RWMutex
-	peers   map[[16]byte]*Peer
+	peersMu       sync.RWMutex
+	peers         map[[16]byte]*Peer
+	expectedPeers map[[16]byte]bool // peers from INFO response we must handshake with
 
 	// Have we sent the INFO request after the first PONG?
 	infoDone atomic.Bool
+	// Have we sent CHAT_REQUEST (non-master clients only)?
+	chatReqSent atomic.Bool
 
 	// Active Chat Key and epoch, guarded by ckMu
 	ckMu         sync.RWMutex
@@ -52,6 +55,13 @@ type Client struct {
 	// Monotonic nonce for our outgoing MESSAGEs — reset to 0 on each CK rotation
 	sendNonce atomic.Uint64
 
+	// Master: true once the periodic-rotation goroutine has been started
+	rotationStarted atomic.Bool
+
+	// firstCKDone: set to true after the very first CK is applied.
+	// Used to trigger automatic history fetch on join.
+	firstCKDone atomic.Bool
+
 	// User-facing channels
 	msgCh   chan InboundMessage
 	eventCh chan Event
@@ -59,6 +69,10 @@ type Client struct {
 	// In-flight history request output channel; nil when idle — guarded by histMu
 	histMu sync.Mutex
 	histCh chan HistoryBatch
+
+	// HSI responses accumulation — guarded by hsiMu
+	hsiMu     sync.Mutex
+	hsiResult map[[16]byte]uint64
 
 	// Lifecycle
 	done   chan struct{}
@@ -82,16 +96,17 @@ func New(cfg Config) (*Client, error) {
 	}
 
 	c := &Client{
-		cfg:     cfg,
-		uuid:    cfg.UUID,
-		edPub:   cfg.PrivateKey.Public().(ed25519.PublicKey),
-		edPriv:  cfg.PrivateKey,
-		ephPub:  ephPub,
-		ephPriv: ephPriv,
-		peers:   make(map[[16]byte]*Peer),
-		msgCh:   make(chan InboundMessage, cfg.MessageBufferSize),
-		eventCh: make(chan Event, cfg.EventBufferSize),
-		done:    make(chan struct{}),
+		cfg:       cfg,
+		uuid:      cfg.UUID,
+		edPub:     cfg.PrivateKey.Public().(ed25519.PublicKey),
+		edPriv:    cfg.PrivateKey,
+		ephPub:    ephPub,
+		ephPriv:   ephPriv,
+		peers:     make(map[[16]byte]*Peer),
+		hsiResult: make(map[[16]byte]uint64),
+		msgCh:     make(chan InboundMessage, cfg.MessageBufferSize),
+		eventCh:   make(chan Event, cfg.EventBufferSize),
+		done:      make(chan struct{}),
 	}
 
 	logInfo("client", "created uuid=%s room=%s server=%s",
@@ -178,6 +193,17 @@ func (c *Client) SendMessage(data []byte) ([16]byte, error) {
 		return [16]byte{}, err
 	}
 
+	// Save own message to history store (handleMessage skips our own echo).
+	if c.cfg.HistoryStore != nil {
+		c.cfg.HistoryStore.Append(HistoryRecord{
+			SenderUUID:  c.uuid,
+			MessageUUID: msgUUID,
+			Timestamp:   pkt.GetHeader().Timestamp,
+			Nonce:       nonce,
+			Data:        append([]byte{}, data...),
+		})
+	}
+
 	logDebug("send", "MESSAGE uuid=%x nonce=%d len=%d", msgUUID[:4], nonce, len(data))
 	return msgUUID, nil
 }
@@ -234,6 +260,39 @@ func (c *Client) IsMaster() bool {
 		}
 	}
 	return true
+}
+
+// DecryptMessageFrame parses a raw MESSAGE frame blob (as returned by history)
+// and decrypts it using the current Chat Key.
+//
+// Signature verification is intentionally skipped: history frames are
+// re-signed by the serving peer (not the original sender) and arrive inside
+// a verified HSRA frame, so trust is already established at the transport level.
+func (c *Client) DecryptMessageFrame(raw []byte) (InboundMessage, error) {
+	pkt, err := protocol.Parse(raw)
+	if err != nil {
+		return InboundMessage{}, fmt.Errorf("DecryptMessageFrame: parse: %w", err)
+	}
+	p, ok := pkt.(*protocol.Message)
+	if !ok {
+		return InboundMessage{}, fmt.Errorf("DecryptMessageFrame: not a MESSAGE frame (got %T)", pkt)
+	}
+
+	c.ckMu.RLock()
+	ck := c.chatKey
+	c.ckMu.RUnlock()
+
+	plain, err := protocol.Decrypt(ck, p.Nonce, p.Ciphertext)
+	if err != nil {
+		return InboundMessage{}, fmt.Errorf("DecryptMessageFrame: decrypt nonce=%d: %w", p.Nonce, err)
+	}
+
+	return InboundMessage{
+		SenderUUID:  p.GetHeader().SenderUUID,
+		MessageUUID: p.MessageUUID,
+		Data:        plain,
+		ReceivedAt:  p.GetHeader().TimestampTime(),
+	}, nil
 }
 
 // ─── Read loop ────────────────────────────────────────────────────────────────
@@ -328,11 +387,13 @@ func (c *Client) dispatch(raw []byte) error {
 		return c.handlePong(raw, p)
 	case *protocol.Info:
 		return c.handleInfo(p)
+	case *protocol.ChatRequest:
+		return c.handleChatRequest(raw, p)
 	case *protocol.ChatKey:
 		return c.handleChatKey(p)
 	case *protocol.ChatKeyACK:
 		logDebug("dispatch", "CHAT_KEY_ACK from=%s", fmtUUID(p.GetHeader().SenderUUID))
-		return nil // master-side, not handled by basic client
+		return nil
 	case *protocol.Message:
 		return c.handleMessage(raw, p)
 	case *protocol.MessageFailed:
@@ -345,12 +406,15 @@ func (c *Client) dispatch(raw []byte) error {
 	case *protocol.FIN:
 		return c.handleFIN(p)
 	case *protocol.KickRequest:
-		logDebug("dispatch", "KICK_REQUEST target=%s", fmtUUID(p.TargetUUID))
-		return nil
+		return c.handleKickRequest(p)
 	case *protocol.Kicked:
 		return c.handleKicked(p)
+	case *protocol.HSIR:
+		return c.handleHSIR(p)
 	case *protocol.HSI:
 		return c.handleHSI(p)
+	case *protocol.HSR:
+		return c.handleHSR(p)
 	case *protocol.HSRA:
 		return c.handleHSRA(p)
 	default:
