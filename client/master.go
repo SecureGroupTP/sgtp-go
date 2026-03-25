@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/binary"
 	"fmt"
 	"sync"
 	"time"
@@ -102,8 +101,9 @@ func (c *Client) sendChatKeyTo(peerID [16]byte, ck [32]byte, epoch uint64) error
 }
 
 // rotateChatKey generates a new Chat Key and sends it to every known peer.
-// It is safe to call concurrently; subsequent calls while a rotation is in
-// progress just queue another rotation (simple best-effort model).
+// While the rotation window is open (from first CHAT_KEY sent to last ACK
+// received) the ckRotating flag is true and incoming MESSAGE frames are
+// rejected with MESSAGE_FAILED (§4.2–4.3).
 func (c *Client) rotateChatKey() error {
 	logInfo("master", "rotating Chat Key")
 
@@ -125,13 +125,27 @@ func (c *Client) rotateChatKey() error {
 		return nil
 	}
 
-	plain := ck[:]  // 32-byte key only; epoch travels plaintext in the frame
+	// Open the rotation window: block MESSAGE processing until all ACKs arrive.
+	c.pendingAckMu.Lock()
+	c.pendingAcks = make(map[[16]byte]struct{}, len(peerIDs))
+	for _, id := range peerIDs {
+		c.pendingAcks[id] = struct{}{}
+	}
+	c.pendingAckMu.Unlock()
+	c.ckRotating.Store(true)
+	logInfo("master", "rotation window opened: waiting ACK from %d peers epoch=%d", len(peerIDs), epoch)
+
+	plain := ck[:] // 32-byte key only; epoch travels plaintext in the frame
 
 	for _, peerID := range peerIDs {
 		c.peersMu.RLock()
 		peer, ok := c.peers[peerID]
 		c.peersMu.RUnlock()
 		if !ok {
+			// Peer disappeared during rotation — remove from pending.
+			c.pendingAckMu.Lock()
+			delete(c.pendingAcks, peerID)
+			c.pendingAckMu.Unlock()
 			continue
 		}
 
@@ -141,6 +155,9 @@ func (c *Client) rotateChatKey() error {
 		cipher, err := protocol.Encrypt(peer.SharedSecret, epoch, plain)
 		if err != nil {
 			logError("master", "encrypt CK for peer=%s: %v", fmtUUID(peerID), err)
+			c.pendingAckMu.Lock()
+			delete(c.pendingAcks, peerID)
+			c.pendingAckMu.Unlock()
 			continue
 		}
 
@@ -156,12 +173,16 @@ func (c *Client) rotateChatKey() error {
 
 		if err := c.sendSigned(pkt.Marshal); err != nil {
 			logError("master", "send CK to peer=%s: %v", fmtUUID(peerID), err)
+			c.pendingAckMu.Lock()
+			delete(c.pendingAcks, peerID)
+			c.pendingAckMu.Unlock()
 		} else {
 			logInfo("master", "CHAT_KEY sent to peer=%s epoch=%d", fmtUUID(peerID), epoch)
 		}
 	}
 
-	// Apply locally.
+	// Apply the new key locally immediately so the master can encrypt with it
+	// as soon as the rotation window closes.
 	c.ckMu.Lock()
 	isFirst := !c.ckReady
 	c.chatKey = ck
@@ -174,9 +195,99 @@ func (c *Client) rotateChatKey() error {
 		c.firstCKDone.Store(true)
 	}
 
-	logInfo("master", "CK applied locally epoch=%d", epoch)
-	c.pushEvent(Event{Kind: EventChatKeyRotated})
+	logInfo("master", "CK applied locally epoch=%d — waiting for ACKs", epoch)
+
+	// Check if all peers already disappeared (sends failed for all) — if so,
+	// close the rotation window immediately.
+	c.pendingAckMu.Lock()
+	remaining := len(c.pendingAcks)
+	c.pendingAckMu.Unlock()
+	if remaining == 0 {
+		c.ckRotating.Store(false)
+		logInfo("master", "rotation window closed immediately (no pending ACKs)")
+		c.pushEvent(Event{Kind: EventChatKeyRotated})
+	}
+
 	return nil
+}
+
+// handleChatKeyACK is called on the master when a peer acknowledges the new
+// Chat Key.  Once all expected ACKs have arrived the rotation window is closed
+// and MESSAGE processing resumes (§4.2).
+func (c *Client) handleChatKeyACK(p *protocol.ChatKeyACK) error {
+	senderID := p.GetHeader().SenderUUID
+	logDebug("master", "CHAT_KEY_ACK from=%s", fmtUUID(senderID))
+
+	if !c.IsMaster() {
+		// Non-master clients ignore stray ACKs.
+		return nil
+	}
+
+	c.pendingAckMu.Lock()
+	delete(c.pendingAcks, senderID)
+	remaining := len(c.pendingAcks)
+	c.pendingAckMu.Unlock()
+
+	logInfo("master", "ACK received from=%s remaining=%d", fmtUUID(senderID), remaining)
+
+	if remaining == 0 && c.ckRotating.CompareAndSwap(true, false) {
+		logInfo("master", "all ACKs received — rotation window closed")
+		c.pushEvent(Event{Kind: EventChatKeyRotated})
+	}
+	return nil
+}
+
+// rejectMessage is called by the master when a MESSAGE arrives during an active
+// rotation window.  It sends MESSAGE_FAILED unicast to every participant
+// (including the sender) encrypted with each peer's individual shared key (§4.3).
+func (c *Client) rejectMessage(p *protocol.Message) error {
+	msgUUID := p.MessageUUID
+	logWarn("master", "rejecting MESSAGE uuid=%x (rotation in progress)", msgUUID[:4])
+
+	c.peersMu.RLock()
+	peerIDs := make([][16]byte, 0, len(c.peers))
+	for id := range c.peers {
+		peerIDs = append(peerIDs, id)
+	}
+	c.peersMu.RUnlock()
+
+	// Also notify the sender itself (it is a peer in the map).
+	for _, peerID := range peerIDs {
+		for attempt := 1; attempt <= protocol.MessageFailedRetries; attempt++ {
+			if err := c.sendMessageFailed(peerID, msgUUID); err != nil {
+				logError("master", "MESSAGE_FAILED attempt %d to peer=%s: %v", attempt, fmtUUID(peerID), err)
+			} else {
+				logDebug("master", "MESSAGE_FAILED sent to peer=%s attempt=%d", fmtUUID(peerID), attempt)
+				break
+			}
+		}
+	}
+	return nil
+}
+
+// sendMessageFailed encrypts the failed message UUID and sends MESSAGE_FAILED
+// to a single peer (§4.3).
+func (c *Client) sendMessageFailed(peerID [16]byte, failedMsgUUID [16]byte) error {
+	c.peersMu.RLock()
+	peer, ok := c.peers[peerID]
+	c.peersMu.RUnlock()
+	if !ok {
+		return fmt.Errorf("master: sendMessageFailed: no shared secret with %s", fmtUUID(peerID))
+	}
+
+	nonce := protocol.NowMillis()
+	cipher, err := protocol.Encrypt(peer.SharedSecret, nonce, failedMsgUUID[:])
+	if err != nil {
+		return fmt.Errorf("master: sendMessageFailed encrypt: %w", err)
+	}
+
+	pkt := &protocol.MessageFailed{Ciphertext: cipher}
+	h := pkt.GetHeader()
+	h.RoomUUID = c.cfg.RoomUUID
+	h.ReceiverUUID = peerID
+	h.SenderUUID = c.uuid
+	h.Timestamp = nonce // timestamp == nonce so receiver can decrypt
+	return c.sendSigned(pkt.Marshal)
 }
 
 // StartRotationTimer starts a background goroutine that rotates the Chat Key
@@ -463,8 +574,5 @@ func (c *Client) sendHSRAEOS(receiverID [16]byte, totalSent uint64) error {
 
 // ─── Deprecated low-level helpers (kept for package-internal use) ─────────────
 
-func encodeEpoch(epoch uint64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, epoch)
-	return b
-}
+
+

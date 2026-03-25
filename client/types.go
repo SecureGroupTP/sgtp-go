@@ -170,7 +170,7 @@ func (cfg *Config) applyDefaults() {
 		cfg.DialTimeout = 10 * time.Second
 	}
 	if cfg.InfoDelay == 0 {
-		cfg.InfoDelay = 500 * time.Millisecond
+		cfg.InfoDelay = 1 * time.Second
 	}
 }
 

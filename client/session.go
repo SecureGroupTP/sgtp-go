@@ -68,12 +68,19 @@ func (c *Client) handleChatKey(p *protocol.ChatKey) error {
 // ─── MESSAGE handler (§5) ─────────────────────────────────────────────────────
 
 // handleMessage verifies the ed25519 signature and decrypts a group message.
+// If we are the master and a CK rotation is in progress, the message is
+// rejected with MESSAGE_FAILED sent unicast to every participant (§4.3).
 func (c *Client) handleMessage(raw []byte, p *protocol.Message) error {
 	senderID := p.GetHeader().SenderUUID
 
 	// Ignore our own echo (relay server broadcasts to everyone including sender).
 	if senderID == c.uuid {
 		return nil
+	}
+
+	// Master: reject during rotation window.
+	if c.IsMaster() && c.ckRotating.Load() {
+		return c.rejectMessage(p)
 	}
 
 	c.peersMu.RLock()
@@ -203,10 +210,26 @@ func (c *Client) handleStatus(p *protocol.Status) error {
 // ─── FIN handler (§7.1) ───────────────────────────────────────────────────────
 
 // handleFIN removes the departing peer from state.
-// If we are the master, we rotate the CK for remaining participants (§7.1).
+// The FIN payload is encrypted with the sender's current CK nonce so only
+// participants who share the key can authenticate the departure (§7.1).
+// If we are the master, we rotate the CK for remaining participants.
 func (c *Client) handleFIN(p *protocol.FIN) error {
 	uid := p.GetHeader().SenderUUID
-	logInfo("session", "FIN from peer=%s", fmtUUID(uid))
+	logInfo("session", "FIN from peer=%s nonce=%d", fmtUUID(uid), p.Nonce)
+
+	// Authenticate: decrypt the (empty) ciphertext with the current CK.
+	// A forged FIN without the correct key will fail the Poly1305 check.
+	if len(p.Ciphertext) > 0 {
+		c.ckMu.RLock()
+		ck := c.chatKey
+		ready := c.ckReady
+		c.ckMu.RUnlock()
+		if ready {
+			if _, err := protocol.Decrypt(ck, p.Nonce, p.Ciphertext); err != nil {
+				return fmt.Errorf("session: FIN authentication failed from peer=%s: %w", fmtUUID(uid), err)
+			}
+		}
+	}
 
 	c.peersMu.Lock()
 	delete(c.peers, uid)

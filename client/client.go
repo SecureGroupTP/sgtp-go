@@ -62,6 +62,13 @@ type Client struct {
 	// Used to trigger automatic history fetch on join.
 	firstCKDone atomic.Bool
 
+	// ckRotating is true on the master while a key rotation is in progress
+	// (from the moment CHAT_KEY frames are sent until all CHAT_KEY_ACKs arrive).
+	// Incoming MESSAGE frames are rejected with MESSAGE_FAILED during this window.
+	ckRotating   atomic.Bool
+	pendingAckMu sync.Mutex
+	pendingAcks  map[[16]byte]struct{} // peers the master is waiting ACK from
+
 	// User-facing channels
 	msgCh   chan InboundMessage
 	eventCh chan Event
@@ -96,17 +103,18 @@ func New(cfg Config) (*Client, error) {
 	}
 
 	c := &Client{
-		cfg:       cfg,
-		uuid:      cfg.UUID,
-		edPub:     cfg.PrivateKey.Public().(ed25519.PublicKey),
-		edPriv:    cfg.PrivateKey,
-		ephPub:    ephPub,
-		ephPriv:   ephPriv,
-		peers:     make(map[[16]byte]*Peer),
-		hsiResult: make(map[[16]byte]uint64),
-		msgCh:     make(chan InboundMessage, cfg.MessageBufferSize),
-		eventCh:   make(chan Event, cfg.EventBufferSize),
-		done:      make(chan struct{}),
+		cfg:         cfg,
+		uuid:        cfg.UUID,
+		edPub:       cfg.PrivateKey.Public().(ed25519.PublicKey),
+		edPriv:      cfg.PrivateKey,
+		ephPub:      ephPub,
+		ephPriv:     ephPriv,
+		peers:       make(map[[16]byte]*Peer),
+		pendingAcks: make(map[[16]byte]struct{}),
+		hsiResult:   make(map[[16]byte]uint64),
+		msgCh:       make(chan InboundMessage, cfg.MessageBufferSize),
+		eventCh:     make(chan Event, cfg.EventBufferSize),
+		done:        make(chan struct{}),
 	}
 
 	logInfo("client", "created uuid=%s room=%s server=%s",
@@ -208,10 +216,34 @@ func (c *Client) SendMessage(data []byte) ([16]byte, error) {
 	return msgUUID, nil
 }
 
-// SendFIN broadcasts a graceful disconnect notification.
+// SendFIN broadcasts a graceful disconnect notification, encrypted with the
+// current Chat Key (§7.1). The plaintext is empty; only the 16-byte Poly1305
+// authentication tag travels on the wire inside the ciphertext field.
 func (c *Client) SendFIN() error {
 	logInfo("client", "sending FIN")
-	pkt := &protocol.FIN{}
+
+	c.ckMu.RLock()
+	ck := c.chatKey
+	ready := c.ckReady
+	c.ckMu.RUnlock()
+
+	nonce := c.sendNonce.Add(1) - 1
+
+	var cipher []byte
+	if ready {
+		var err error
+		cipher, err = protocol.Encrypt(ck, nonce, []byte{})
+		if err != nil {
+			return fmt.Errorf("github.com/SecureGroupTP/sgtp-go/client: SendFIN encrypt: %w", err)
+		}
+	}
+	// If no CK is available yet (client disconnects before first key rotation),
+	// send FIN with an empty ciphertext so the frame is still parseable.
+
+	pkt := &protocol.FIN{
+		Nonce:      nonce,
+		Ciphertext: cipher,
+	}
 	h := pkt.GetHeader()
 	h.RoomUUID = c.cfg.RoomUUID
 	h.ReceiverUUID = protocol.BroadcastUUID
@@ -392,8 +424,7 @@ func (c *Client) dispatch(raw []byte) error {
 	case *protocol.ChatKey:
 		return c.handleChatKey(p)
 	case *protocol.ChatKeyACK:
-		logDebug("dispatch", "CHAT_KEY_ACK from=%s", fmtUUID(p.GetHeader().SenderUUID))
-		return nil
+		return c.handleChatKeyACK(p)
 	case *protocol.Message:
 		return c.handleMessage(raw, p)
 	case *protocol.MessageFailed:

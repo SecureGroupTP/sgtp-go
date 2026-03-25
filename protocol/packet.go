@@ -685,21 +685,36 @@ func unmarshalHSRA(h *Header, payload, sig []byte) (*HSRA, error) {
 
 // ─── FIN 0x0F ────────────────────────────────────────────────────────────────
 
-// FIN signals orderly disconnect. Broadcast. No payload.
-type FIN struct{ base }
+// FIN signals orderly disconnect. Broadcast, encrypted with the current Chat Key.
+// Nonce is the sender's monotonic counter (same scheme as MESSAGE).
+// Ciphertext is an empty plaintext sealed with ChaCha20-Poly1305 (16-byte auth tag only).
+type FIN struct {
+	base
+	Nonce      uint64
+	Ciphertext []byte // 16 bytes on the wire: AEAD tag over empty plaintext
+}
 
 func (p *FIN) Marshal() []byte {
 	p.Hdr.Version = ProtocolVersion
 	p.Hdr.PacketType = TypeFIN
-	p.Hdr.PayloadLen = 0
+	p.Hdr.PayloadLen = uint32(8 + len(p.Ciphertext))
 	buf := MarshalHeader(&p.Hdr)
+	nb := make([]byte, 8)
+	binary.BigEndian.PutUint64(nb, p.Nonce)
+	buf = append(buf, nb...)
+	buf = append(buf, p.Ciphertext...)
 	buf = append(buf, p.Signature[:]...)
 	return buf
 }
 
-func unmarshalFIN(h *Header, _, sig []byte) (*FIN, error) {
+func unmarshalFIN(h *Header, payload, sig []byte) (*FIN, error) {
+	if len(payload) < 8 {
+		return nil, fmt.Errorf("sgtp: FIN payload too short")
+	}
 	p := &FIN{}
 	p.Hdr = *h
+	p.Nonce = binary.BigEndian.Uint64(payload[0:8])
+	p.Ciphertext = append([]byte{}, payload[8:]...)
 	copy(p.Signature[:], sig)
 	return p, nil
 }
