@@ -626,10 +626,22 @@ function readString(view, offset) {
 }
 
 function parseOpenSshPrivateKey(bytes) {
+  // Strip PEM wrapper and base64-decode to get raw binary
+  const text = new TextDecoder().decode(bytes);
+  let b64 = '';
+  let inKey = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (line === '-----BEGIN OPENSSH PRIVATE KEY-----') { inKey = true; continue; }
+    if (line === '-----END OPENSSH PRIVATE KEY-----') { break; }
+    if (inKey) b64 += line.trim();
+  }
+  if (!b64) throw new Error('Not an OpenSSH private key (PEM header not found)');
+  bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+
   const magic = 'openssh-key-v1\x00';
   const magicBytes = new TextEncoder().encode(magic);
   for (let i = 0; i < magicBytes.length; i++) {
-    if (bytes[i] !== magicBytes[i]) throw new Error('Not an OpenSSH private key');
+    if (bytes[i] !== magicBytes[i]) throw new Error('Not an OpenSSH private key (bad magic)');
   }
 
   const view = new DataView(bytes.buffer, bytes.byteOffset);
