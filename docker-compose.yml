@@ -1,0 +1,34 @@
+services:
+
+  # ── SGTP relay server ────────────────────────────────────────────────────────
+  server:
+    build: .
+    command: ./sgtp-server --addr :77
+    ports:
+      - "77:77"
+    restart: unless-stopped
+    networks:
+      - sgtp
+
+  # ── Web bridge + UI ──────────────────────────────────────────────────────────
+  webbridge:
+    build: .
+    command: ./sgtp-webbridge
+      -relay server:77
+      -http :5735
+      -web ./web
+    ports:
+      - "5735:5735"
+    volumes:
+      # Optional: put trusted .pub files here to whitelist them server-side.
+      # Users can also upload their whitelist directly in the browser.
+      - ./whitelist:/data/whitelist:ro
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - sgtp
+
+networks:
+  sgtp:
+    driver: bridge

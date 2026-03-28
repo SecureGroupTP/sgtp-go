@@ -7,28 +7,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
-/* ─── Reset & Base ─────────────────────────────────────────────────────── */
 *,::before,::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:       #0d0f12;
-  --bg2:      #131720;
-  --bg3:      #1b2130;
-  --bg4:      #222a3a;
-  --border:   rgba(255,255,255,0.06);
-  --border2:  rgba(255,255,255,0.12);
-  --text:     #e2e8f3;
-  --text2:    #8896b0;
-  --text3:    #4f617a;
-  --accent:   #00c9a7;
-  --accent2:  #0090d4;
-  --danger:   #ff5555;
-  --warn:     #f59e0b;
-  --green:    #22c55e;
-  --mono:     'Space Mono', monospace;
-  --sans:     'DM Sans', sans-serif;
-  --radius:   10px;
-  --sidebar:  260px;
-  --shadow:   0 4px 24px rgba(0,0,0,.45);
+  --bg:#0d0f12;--bg2:#131720;--bg3:#1b2130;--bg4:#222a3a;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --text:#e2e8f3;--text2:#8896b0;--text3:#4f617a;
+  --accent:#00c9a7;--accent2:#0090d4;
+  --danger:#ff5555;--warn:#f59e0b;--green:#22c55e;
+  --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
+  --radius:10px;--sidebar:260px;--shadow:0 4px 24px rgba(0,0,0,.45);
 }
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--sans)}
 button{cursor:pointer;border:none;background:none;font-family:inherit;color:inherit}
@@ -38,87 +25,56 @@ a{color:var(--accent);text-decoration:none}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
 
-/* ─── Layout ───────────────────────────────────────────────────────────── */
 #app{display:flex;height:100vh;overflow:hidden}
 
-/* ─── Sidebar ──────────────────────────────────────────────────────────── */
+/* ── Sidebar ── */
 #sidebar{
   width:var(--sidebar);min-width:var(--sidebar);
-  background:var(--bg2);
-  border-right:1px solid var(--border);
-  display:flex;flex-direction:column;
-  position:relative;z-index:10;
-  transition:transform .25s;
+  background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:relative;z-index:10;
 }
 #sidebar-header{
-  padding:20px 16px 12px;
-  border-bottom:1px solid var(--border);
+  padding:20px 16px 12px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:10px;
 }
 #sidebar-header .logo{
   width:32px;height:32px;
   background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border-radius:8px;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
+  border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 #sidebar-header .logo svg{width:18px;height:18px;fill:#fff}
 #sidebar-title{font-size:15px;font-weight:600;letter-spacing:-.3px}
 #sidebar-title span{font-size:10px;font-family:var(--mono);color:var(--accent);display:block;margin-top:1px}
-
 #rooms-label{
-  padding:14px 16px 6px;
-  font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;
-  color:var(--text3);
+  padding:14px 16px 6px;font-size:10px;font-weight:600;letter-spacing:1.2px;
+  text-transform:uppercase;color:var(--text3);
   display:flex;align-items:center;justify-content:space-between;
 }
 #rooms-label button{
-  width:20px;height:20px;
-  background:var(--bg4);border-radius:5px;
+  width:20px;height:20px;background:var(--bg4);border-radius:5px;
   font-size:14px;color:var(--text2);
-  display:flex;align-items:center;justify-content:center;
-  transition:background .15s,color .15s;
+  display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s;
 }
 #rooms-label button:hover{background:var(--accent);color:#000}
-
 #rooms-list{flex:1;overflow-y:auto;padding:4px 8px}
 .room-item{
-  display:flex;align-items:center;gap:10px;
-  padding:9px 10px;border-radius:8px;
-  cursor:pointer;transition:background .12s;
-  margin-bottom:2px;position:relative;
+  display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;
+  cursor:pointer;transition:background .12s;margin-bottom:2px;
 }
 .room-item:hover{background:var(--bg3)}
 .room-item.active{background:linear-gradient(90deg,rgba(0,201,167,.12),rgba(0,144,212,.06));border:1px solid rgba(0,201,167,.2)}
-.room-item .room-icon{
-  width:34px;height:34px;border-radius:9px;
-  background:var(--bg4);
+.room-icon{
+  width:34px;height:34px;border-radius:9px;background:var(--bg4);
   display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;
-  font-family:var(--mono);
-  color:var(--accent);
-  font-weight:700;
+  font-size:15px;flex-shrink:0;font-family:var(--mono);color:var(--accent);font-weight:700;
 }
-.room-item .room-info{min-width:0}
-.room-item .room-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.room-item .room-last{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.room-item .room-badge{
-  margin-left:auto;flex-shrink:0;
-  background:var(--accent);color:#000;
-  font-size:10px;font-weight:700;
-  min-width:18px;height:18px;padding:0 5px;
-  border-radius:9px;display:flex;align-items:center;justify-content:center;
-}
-
-#sidebar-footer{
-  padding:12px 8px;
-  border-top:1px solid var(--border);
-}
+.room-info{min-width:0}
+.room-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-last{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+#sidebar-footer{padding:12px 8px;border-top:1px solid var(--border)}
 #my-identity{
-  display:flex;align-items:center;gap:10px;
-  padding:8px 10px;border-radius:8px;
-  background:var(--bg3);
-  cursor:pointer;transition:background .12s;
+  display:flex;align-items:center;gap:10px;padding:8px 10px;
+  border-radius:8px;background:var(--bg3);cursor:pointer;transition:background .12s;
 }
 #my-identity:hover{background:var(--bg4)}
 .identity-avatar{
@@ -133,258 +89,191 @@ a{color:var(--accent);text-decoration:none}
 .identity-status{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0}
 .identity-status.online{background:var(--green)}
 
-/* ─── Main area ────────────────────────────────────────────────────────── */
+/* ── Main area ── */
 #main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
 
-/* Connect screen */
-#connect-screen{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;
+/* ── Setup screen ── */
+#setup-screen{
+  position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;
-  background:var(--bg);z-index:50;
-  padding:40px;
+  background:var(--bg);z-index:50;padding:24px;overflow-y:auto;
 }
-#connect-screen.hidden{display:none}
-.connect-card{
-  width:100%;max-width:440px;
-  background:var(--bg2);
-  border:1px solid var(--border2);
-  border-radius:16px;
-  padding:32px;
-  box-shadow:var(--shadow);
+#setup-screen.hidden{display:none}
+.setup-card{
+  width:100%;max-width:480px;
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:16px;padding:32px;box-shadow:var(--shadow);
 }
-.connect-card h2{
-  font-size:22px;font-weight:600;margin-bottom:4px;
+.setup-card h2{font-size:20px;font-weight:600;margin-bottom:4px}
+.setup-card .subtitle{font-size:13px;color:var(--text2);margin-bottom:28px}
+
+.field{margin-bottom:14px}
+.field label{
+  display:block;font-size:11px;font-weight:600;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--text3);margin-bottom:6px;
 }
-.connect-card .subtitle{
-  font-size:13px;color:var(--text2);margin-bottom:28px;
-}
-.field{margin-bottom:16px}
-.field label{display:block;font-size:11px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
-.field input{
-  width:100%;background:var(--bg3);
-  border:1px solid var(--border2);
-  border-radius:8px;padding:10px 12px;
-  font-size:13px;color:var(--text);
+.field input[type=text]{
+  width:100%;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);
   transition:border-color .15s;
 }
-.field input:focus{border-color:var(--accent)}
+.field input[type=text]:focus{border-color:var(--accent)}
 .field .hint{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* File drop zones */
+.drop-zone{
+  border:1.5px dashed var(--border2);border-radius:10px;
+  padding:14px 16px;cursor:pointer;transition:border-color .15s,background .15s;
+  display:flex;align-items:center;gap:12px;position:relative;
+}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(0,201,167,.04)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-zone-icon{
+  width:36px;height:36px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.drop-zone-icon svg{width:20px;height:20px}
+.drop-zone-text{min-width:0}
+.drop-zone-title{font-size:13px;font-weight:500}
+.drop-zone-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.drop-zone.ok .drop-zone-title{color:var(--green)}
+.drop-zone.ok{border-color:rgba(34,197,94,.4)}
+
+/* Public key display */
+#my-pubkey-box{
+  background:var(--bg3);border-radius:8px;padding:10px 12px;
+  font-family:var(--mono);font-size:11px;color:var(--accent);
+  word-break:break-all;margin-top:8px;display:none;
+  cursor:pointer;border:1px solid var(--border);
+  transition:border-color .15s;
+}
+#my-pubkey-box:hover{border-color:var(--accent)}
+#my-pubkey-label{font-size:10px;color:var(--text3);margin-top:4px;display:none}
+
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:10px 20px;border-radius:8px;
-  font-size:13px;font-weight:600;
+  padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;
   transition:opacity .15s,transform .1s;
 }
 .btn:active{transform:scale(.97)}
-.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#000;width:100%;padding:12px}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#000;width:100%;padding:12px;
+}
 .btn-primary:hover{opacity:.9}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
 .btn-sm{padding:6px 14px;font-size:12px}
 .btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border2)}
 .btn-ghost:hover{background:var(--bg4)}
 .btn-danger{background:rgba(255,85,85,.15);color:var(--danger);border:1px solid rgba(255,85,85,.25)}
 .btn-danger:hover{background:rgba(255,85,85,.25)}
+.setup-divider{
+  display:flex;align-items:center;gap:12px;margin:16px 0;
+}
+.setup-divider span{font-size:11px;color:var(--text3);white-space:nowrap}
+.setup-divider::before,.setup-divider::after{content:'';flex:1;height:1px;background:var(--border2)}
 
-/* Chat header */
+/* ── Chat header ── */
 #chat-header{
-  padding:0 20px;height:56px;
-  border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:12px;
-  background:var(--bg2);
-  flex-shrink:0;
+  padding:0 20px;height:56px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;background:var(--bg2);flex-shrink:0;
 }
 #chat-header.hidden{display:none}
 #chat-room-name{font-size:15px;font-weight:600}
 #chat-room-id{font-size:10px;font-family:var(--mono);color:var(--text3);margin-top:1px}
 #header-actions{margin-left:auto;display:flex;gap:8px}
 .icon-btn{
-  width:34px;height:34px;border-radius:8px;
-  background:var(--bg3);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--text2);
+  width:34px;height:34px;border-radius:8px;background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;color:var(--text2);
   transition:background .12s,color .12s;
 }
 .icon-btn:hover{background:var(--bg4);color:var(--text)}
-.icon-btn.active-call{background:rgba(34,197,94,.15);color:var(--green);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.4)}50%{box-shadow:0 0 0 6px transparent}}
 .peer-pills{display:flex;gap:4px;flex-wrap:wrap}
 .peer-pill{
-  font-size:10px;font-family:var(--mono);
-  padding:3px 8px;border-radius:20px;
-  background:var(--bg4);color:var(--text2);
+  font-size:10px;font-family:var(--mono);padding:3px 8px;
+  border-radius:20px;background:var(--bg4);color:var(--text2);
 }
 .peer-pill.online{background:rgba(34,197,94,.12);color:var(--green)}
 
-/* Messages area */
+/* ── Messages ── */
 #messages-wrap{flex:1;overflow:hidden;position:relative}
-#messages{
-  height:100%;overflow-y:auto;
-  padding:16px 20px;
-  display:flex;flex-direction:column;gap:2px;
-}
-.msg-group{margin-bottom:8px}
-.msg-date-divider{
-  text-align:center;margin:12px 0;
-}
-.msg-date-divider span{
-  font-size:11px;color:var(--text3);
-  background:var(--bg);padding:3px 12px;border-radius:20px;
-  border:1px solid var(--border);
-}
-.msg-row{
-  display:flex;gap:10px;align-items:flex-end;
-  padding:2px 0;
-}
+#messages{height:100%;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:2px}
+.msg-row{display:flex;gap:10px;align-items:flex-end;padding:2px 0}
 .msg-row.mine{flex-direction:row-reverse}
 .msg-avatar{
-  width:28px;height:28px;border-radius:7px;
-  flex-shrink:0;margin-bottom:2px;
+  width:28px;height:28px;border-radius:7px;flex-shrink:0;margin-bottom:2px;
   display:flex;align-items:center;justify-content:center;
   font-size:11px;font-weight:700;font-family:var(--mono);
 }
-.msg-avatar.hidden{visibility:hidden}
-.bubble{
-  max-width:65%;
-  position:relative;
-}
+.bubble{max-width:65%;position:relative}
 .msg-row.mine .bubble{align-items:flex-end}
 .bubble-inner{
-  background:var(--bg3);
-  border:1px solid var(--border);
-  border-radius:12px 12px 12px 4px;
-  padding:8px 12px;
-  font-size:14px;line-height:1.5;
-  word-break:break-word;
-  position:relative;
-  transition:background .15s;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:12px 12px 12px 4px;padding:8px 12px;
+  font-size:14px;line-height:1.5;word-break:break-word;
 }
 .msg-row.mine .bubble-inner{
   background:linear-gradient(135deg,rgba(0,201,167,.18),rgba(0,144,212,.12));
-  border-color:rgba(0,201,167,.25);
-  border-radius:12px 12px 4px 12px;
+  border-color:rgba(0,201,167,.25);border-radius:12px 12px 4px 12px;
 }
-.bubble-inner:hover{background:var(--bg4)}
-.msg-row.mine .bubble-inner:hover{background:rgba(0,201,167,.22)}
-.bubble-meta{
-  display:flex;align-items:center;gap:5px;
-  font-size:10px;color:var(--text3);
-  margin-top:3px;padding:0 2px;
-}
+.bubble-meta{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text3);margin-top:3px;padding:0 2px}
 .msg-row.mine .bubble-meta{justify-content:flex-end}
 .msg-sender{font-family:var(--mono);font-size:10px;color:var(--accent);margin-bottom:2px;font-weight:700}
-.msg-failed{opacity:.5;text-decoration:line-through}
+.sys-msg{text-align:center;font-size:11px;color:var(--text3);padding:4px 0;font-family:var(--mono)}
 
-/* File bubble */
+/* ── Image / file / audio bubbles ── */
+.img-bubble{max-width:280px;border-radius:10px;overflow:hidden;cursor:pointer;position:relative}
+.img-bubble img{width:100%;display:block;max-height:300px;object-fit:cover}
+.img-overlay{position:absolute;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+.img-bubble:hover .img-overlay{opacity:1}
 .file-bubble{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 12px;
-  background:var(--bg4);border-radius:10px;
-  cursor:pointer;transition:background .12s;
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--bg4);border-radius:10px;cursor:pointer;transition:background .12s;
 }
 .file-bubble:hover{background:var(--border2)}
-.file-icon{
-  width:36px;height:36px;border-radius:8px;
-  background:rgba(0,201,167,.15);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.file-icon{width:36px;height:36px;border-radius:8px;background:rgba(0,201,167,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .file-icon svg{width:20px;height:20px;stroke:var(--accent)}
 .file-info .file-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
 .file-info .file-size{font-size:11px;color:var(--text3);margin-top:2px}
-.progress-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width .3s}
-
-/* Image bubble */
-.img-bubble{
-  max-width:280px;border-radius:10px;overflow:hidden;cursor:pointer;
-  position:relative;
-}
-.img-bubble img{width:100%;display:block;max-height:300px;object-fit:cover}
-.img-overlay{
-  position:absolute;inset:0;background:rgba(0,0,0,.3);
-  display:flex;align-items:center;justify-content:center;
-  opacity:0;transition:opacity .15s;
-}
-.img-bubble:hover .img-overlay{opacity:1}
-
-/* Audio bubble */
-.audio-bubble{
-  display:flex;align-items:center;gap:10px;
-  padding:8px 12px;min-width:200px;
-}
-.play-btn{
-  width:34px;height:34px;border-radius:50%;
-  background:var(--accent);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.audio-bubble{display:flex;align-items:center;gap:10px;padding:8px 12px;min-width:200px}
+.play-btn{width:34px;height:34px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .play-btn svg{width:14px;height:14px;fill:#000}
-.audio-wave{
-  flex:1;height:28px;
-  display:flex;align-items:center;gap:1.5px;cursor:pointer;
-}
-.wave-bar{
-  flex:1;border-radius:1px;
-  background:var(--text3);transition:background .15s;
-  min-height:3px;
-}
+.audio-wave{flex:1;height:28px;display:flex;align-items:center;gap:1.5px;cursor:pointer}
+.wave-bar{flex:1;border-radius:1px;background:var(--text3);transition:background .15s;min-height:3px}
 .audio-wave.playing .wave-bar{animation:wave-anim .8s infinite alternate}
 .wave-bar:nth-child(2n){animation-delay:.1s}
 .wave-bar:nth-child(3n){animation-delay:.2s}
 @keyframes wave-anim{from{background:var(--accent);transform:scaleY(.5)}to{background:var(--accent);transform:scaleY(1)}}
 .audio-time{font-size:11px;font-family:var(--mono);color:var(--text3)}
+.progress-bar{height:3px;background:var(--bg);border-radius:2px;margin-top:8px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;transition:width .3s}
 
-/* System message */
-.sys-msg{
-  text-align:center;font-size:11px;color:var(--text3);
-  padding:4px 0;
-  font-family:var(--mono);
-}
-
-/* Typing indicator */
-#typing-indicator{
-  padding:6px 20px;font-size:12px;color:var(--text3);
-  font-style:italic;min-height:24px;
-}
-
-/* Input area */
-#input-area{
-  border-top:1px solid var(--border);
-  background:var(--bg2);
-  padding:12px 16px;
-  flex-shrink:0;
-}
+/* ── Input area ── */
+#input-area{border-top:1px solid var(--border);background:var(--bg2);padding:12px 16px;flex-shrink:0}
 #input-area.hidden{display:none}
 #input-bar{
   display:flex;align-items:flex-end;gap:8px;
-  background:var(--bg3);
-  border:1px solid var(--border2);
-  border-radius:12px;
-  padding:8px 10px;
-  transition:border-color .15s;
+  background:var(--bg3);border:1px solid var(--border2);
+  border-radius:12px;padding:8px 10px;transition:border-color .15s;
 }
 #input-bar:focus-within{border-color:rgba(0,201,167,.4)}
 #msg-input{
-  flex:1;min-height:22px;max-height:120px;
-  resize:none;overflow-y:auto;
-  font-size:14px;line-height:1.5;
-  color:var(--text);
-  background:transparent;
+  flex:1;min-height:22px;max-height:120px;resize:none;overflow-y:auto;
+  font-size:14px;line-height:1.5;color:var(--text);background:transparent;
 }
 #msg-input::placeholder{color:var(--text3)}
 .input-actions{display:flex;gap:4px;align-items:flex-end;flex-shrink:0}
 .input-btn{
   width:32px;height:32px;border-radius:8px;
   display:flex;align-items:center;justify-content:center;
-  color:var(--text2);transition:background .12s,color .12s;
-  position:relative;
+  color:var(--text2);transition:background .12s,color .12s;position:relative;
 }
 .input-btn:hover{background:var(--bg4);color:var(--text)}
 .input-btn svg{width:18px;height:18px}
 #send-btn{
   width:36px;height:36px;
   background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border-radius:9px;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
+  border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
   transition:opacity .15s,transform .1s;
 }
 #send-btn:hover{opacity:.9}
@@ -394,151 +283,56 @@ a{color:var(--accent);text-decoration:none}
 #rec-btn.recording{background:rgba(255,85,85,.15);color:var(--danger);animation:pulse-red 1s infinite}
 @keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(255,85,85,.4)}50%{box-shadow:0 0 0 4px transparent}}
 #file-input{display:none}
-
-/* Attach preview */
-#attach-preview{
-  display:flex;gap:8px;padding:0 0 10px;overflow-x:auto;
-  flex-wrap:nowrap;
-}
+#attach-preview{display:flex;gap:8px;padding:0 0 10px;overflow-x:auto;flex-wrap:nowrap}
 #attach-preview:empty{display:none}
-.attach-thumb{
-  position:relative;flex-shrink:0;
-  width:68px;height:68px;border-radius:8px;overflow:hidden;
-  background:var(--bg4);border:1px solid var(--border2);
-}
+.attach-thumb{position:relative;flex-shrink:0;width:68px;height:68px;border-radius:8px;overflow:hidden;background:var(--bg4);border:1px solid var(--border2)}
 .attach-thumb img{width:100%;height:100%;object-fit:cover}
-.attach-thumb .remove-attach{
-  position:absolute;top:2px;right:2px;
-  width:16px;height:16px;border-radius:50%;
-  background:rgba(0,0,0,.7);color:#fff;
-  font-size:10px;display:flex;align-items:center;justify-content:center;
-}
-.attach-file-icon{
-  width:100%;height:100%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  font-size:9px;color:var(--text2);padding:4px;
-}
+.attach-thumb .remove-attach{position:absolute;top:2px;right:2px;width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.7);color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+.attach-file-icon{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9px;color:var(--text2);padding:4px}
 .attach-file-icon svg{width:20px;height:20px;stroke:var(--text2)}
-.attach-file-icon span{text-align:center;overflow:hidden;width:100%;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
 
-/* ─── Call overlay ─────────────────────────────────────────────────────── */
-#call-overlay{
-  position:fixed;inset:0;z-index:200;
-  background:rgba(0,0,0,.85);backdrop-filter:blur(12px);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:24px;
-}
-#call-overlay.hidden{display:none}
-#call-status{font-size:13px;font-family:var(--mono);color:var(--text2);letter-spacing:.5px}
-#call-peer-name{font-size:28px;font-weight:600}
-.call-videos{display:flex;gap:16px;align-items:center}
-#remote-video,#local-video{
-  border-radius:12px;overflow:hidden;background:#000;
-}
-#remote-video{width:560px;height:315px}
-#local-video{
-  width:160px;height:90px;
-  position:fixed;bottom:140px;right:32px;
-  border:2px solid var(--border2);
-  z-index:201;
-}
-#remote-video video,#local-video video{width:100%;height:100%;object-fit:cover;display:block}
-.call-controls{display:flex;gap:12px}
-.call-ctrl{
-  width:52px;height:52px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;
-  background:var(--bg3);
-  transition:background .15s,transform .1s;
-}
-.call-ctrl:hover{background:var(--bg4)}
-.call-ctrl:active{transform:scale(.93)}
-.call-ctrl.end{background:var(--danger)}
-.call-ctrl.end:hover{background:#cc3333}
-.call-ctrl.active{background:var(--bg4);color:var(--accent)}
-
-/* ─── Incoming call banner ─────────────────────────────────────────────── */
-#incoming-call{
-  position:fixed;top:16px;right:16px;z-index:300;
-  background:var(--bg2);border:1px solid var(--border2);
-  border-radius:14px;padding:16px 20px;
-  box-shadow:var(--shadow);
-  display:flex;flex-direction:column;gap:12px;
-  min-width:260px;
-  animation:slide-in .25s ease;
-}
-#incoming-call.hidden{display:none}
-@keyframes slide-in{from{transform:translateX(110%)}to{transform:translateX(0)}}
-#incoming-call h4{font-size:14px;font-weight:600}
-#incoming-call p{font-size:12px;color:var(--text2)}
-.incoming-actions{display:flex;gap:8px}
-
-/* ─── Lightbox ─────────────────────────────────────────────────────────── */
-#lightbox{
-  position:fixed;inset:0;z-index:400;
-  background:rgba(0,0,0,.92);
-  display:flex;align-items:center;justify-content:center;
-}
+/* ── Lightbox ── */
+#lightbox{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center}
 #lightbox.hidden{display:none}
 #lightbox img{max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:var(--shadow)}
-#lightbox-close{
-  position:fixed;top:20px;right:20px;
-  width:40px;height:40px;border-radius:50%;
-  background:rgba(255,255,255,.1);color:#fff;
-  font-size:20px;display:flex;align-items:center;justify-content:center;
-}
+#lightbox-close{position:fixed;top:20px;right:20px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.1);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center}
 #lightbox-close:hover{background:rgba(255,255,255,.2)}
 
-/* ─── New room modal ───────────────────────────────────────────────────── */
-#modal-overlay{
-  position:fixed;inset:0;z-index:100;
-  background:rgba(0,0,0,.6);backdrop-filter:blur(4px);
-  display:flex;align-items:center;justify-content:center;
-}
+/* ── Modal (add room) ── */
+#modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center}
 #modal-overlay.hidden{display:none}
-.modal{
-  background:var(--bg2);border:1px solid var(--border2);
-  border-radius:16px;padding:28px;min-width:380px;
-  box-shadow:var(--shadow);
-}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:28px;min-width:380px;box-shadow:var(--shadow)}
 .modal h3{font-size:18px;font-weight:600;margin-bottom:6px}
 .modal p{font-size:13px;color:var(--text2);margin-bottom:20px}
 .modal-actions{display:flex;gap:8px;margin-top:20px}
 
-/* ─── Toast ────────────────────────────────────────────────────────────── */
-#toasts{
-  position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-  z-index:500;display:flex;flex-direction:column;gap:6px;align-items:center;
-}
-.toast{
-  background:var(--bg2);border:1px solid var(--border2);
-  border-radius:8px;padding:8px 16px;
-  font-size:13px;color:var(--text);
-  box-shadow:var(--shadow);
-  animation:toast-in .2s ease,toast-out .2s ease 2.8s forwards;
-  white-space:nowrap;
-}
+/* ── Empty state ── */
+#empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--text3)}
+#empty-state svg{width:56px;height:56px;stroke:var(--text3);opacity:.4}
+#empty-state h3{font-size:16px;font-weight:500;color:var(--text2)}
+#empty-state p{font-size:13px;text-align:center;max-width:280px}
+
+/* ── Toast ── */
+#toasts{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:6px;align-items:center}
+.toast{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 16px;font-size:13px;color:var(--text);box-shadow:var(--shadow);animation:toast-in .2s ease,toast-out .2s ease 2.8s forwards;white-space:nowrap}
 .toast.error{border-color:rgba(255,85,85,.3);color:var(--danger)}
 .toast.success{border-color:rgba(34,197,94,.3);color:var(--green)}
 @keyframes toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes toast-out{from{opacity:1}to{opacity:0;transform:translateY(-6px)}}
 
-/* ─── Empty state ──────────────────────────────────────────────────────── */
-#empty-state{
-  flex:1;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:12px;
-  color:var(--text3);
-}
-#empty-state svg{width:56px;height:56px;stroke:var(--text3);opacity:.4}
-#empty-state h3{font-size:16px;font-weight:500;color:var(--text2)}
-#empty-state p{font-size:13px;text-align:center;max-width:280px}
+/* ── Setup steps indicator ── */
+.step-dots{display:flex;gap:6px;justify-content:center;margin-bottom:24px}
+.step-dot{width:6px;height:6px;border-radius:50%;background:var(--bg4);transition:background .2s,width .2s}
+.step-dot.active{background:var(--accent);width:18px;border-radius:3px}
+.step-dot.done{background:var(--green)}
 
-/* ─── Noise overlay ────────────────────────────────────────────────────── */
-body::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:1000;
-  opacity:.025;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+/* ── Connecting spinner ── */
+.spinner{
+  width:32px;height:32px;border:3px solid var(--border2);
+  border-top-color:var(--accent);border-radius:50%;
+  animation:spin 1s linear infinite;
 }
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -554,16 +348,13 @@ body::after{
         <div id="sidebar-title">SGTP <span>v0.3 · encrypted</span></div>
       </div>
     </div>
-
     <div id="rooms-label">
       Rooms
-      <button id="new-room-btn" title="New room">+</button>
+      <button id="new-room-btn" title="Add room">+</button>
     </div>
-
-    <div id="rooms-list"><!-- rooms injected here --></div>
-
+    <div id="rooms-list"></div>
     <div id="sidebar-footer">
-      <div id="my-identity" title="Click to copy your public key">
+      <div id="my-identity" title="Click to copy public key">
         <div class="identity-avatar" id="my-avatar">?</div>
         <div class="identity-info">
           <div class="identity-nick" id="my-nick">Not connected</div>
@@ -576,25 +367,113 @@ body::after{
 
   <!-- Main -->
   <div id="main">
-    <!-- Connect screen -->
-    <div id="connect-screen">
-      <div class="connect-card">
-        <h2>Join a room</h2>
-        <p class="subtitle">Connect to the SGTP relay and start chatting securely.</p>
-        <div class="field">
-          <label>Your nickname</label>
-          <input id="nick-input" type="text" placeholder="Alice" maxlength="32"/>
+
+    <!-- ═══ SETUP SCREEN ═══ -->
+    <div id="setup-screen">
+      <div class="setup-card">
+        <div class="step-dots" id="step-dots">
+          <div class="step-dot active"></div>
+          <div class="step-dot"></div>
+          <div class="step-dot"></div>
         </div>
-        <div class="field">
-          <label>Relay server</label>
-          <input id="relay-input" type="text" value="localhost:7777"/>
-          <div class="hint">WebSocket bridge address (default: same host :8080)</div>
+
+        <!-- Step 1: Identity -->
+        <div id="step-1">
+          <h2>Your identity</h2>
+          <p class="subtitle">Upload your ed25519 private key (OpenSSH format). It never leaves your browser.</p>
+
+          <div class="field">
+            <label>Private key file</label>
+            <div class="drop-zone" id="key-zone">
+              <input type="file" id="key-file-input" accept="*"/>
+              <div class="drop-zone-icon" style="background:rgba(0,201,167,.12)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+              </div>
+              <div class="drop-zone-text">
+                <div class="drop-zone-title" id="key-zone-title">Drop key file here or click</div>
+                <div class="drop-zone-sub">id_ed25519 · OpenSSH format</div>
+              </div>
+            </div>
+            <div id="my-pubkey-box" title="Click to copy"></div>
+            <div id="my-pubkey-label">Your public key — share with peers</div>
+          </div>
+
+          <button class="btn btn-primary" id="step1-next" disabled>Continue →</button>
         </div>
-        <div class="field">
-          <label>Room ID <span style="color:var(--text3);font-size:10px;font-weight:400">(leave empty to create new)</span></label>
-          <input id="room-input" type="text" placeholder="32 hex characters" maxlength="32"/>
+
+        <!-- Step 2: Whitelist -->
+        <div id="step-2" style="display:none">
+          <h2>Trusted peers</h2>
+          <p class="subtitle">Upload .pub files of peers you trust. Without whitelist, anyone can join.</p>
+
+          <div class="field">
+            <label>Whitelist public keys</label>
+            <div class="drop-zone" id="wl-zone">
+              <input type="file" id="wl-file-input" accept="*" multiple/>
+              <div class="drop-zone-icon" style="background:rgba(0,144,212,.12)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2">
+                  <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+                </svg>
+              </div>
+              <div class="drop-zone-text">
+                <div class="drop-zone-title" id="wl-zone-title">Drop .pub files or click</div>
+                <div class="drop-zone-sub">Multiple files allowed</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="setup-divider"><span>or</span></div>
+          <div class="field">
+            <label style="color:var(--text3)">Skip whitelist (everyone trusted)</label>
+          </div>
+
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="goStep(1)">← Back</button>
+            <button class="btn btn-primary" id="step2-next" style="flex:1">Continue →</button>
+          </div>
         </div>
-        <button class="btn btn-primary" id="connect-btn">Connect</button>
+
+        <!-- Step 3: Connect -->
+        <div id="step-3" style="display:none">
+          <h2>Join a room</h2>
+          <p class="subtitle">Enter the relay address and optionally a room ID to join.</p>
+
+          <div class="field">
+            <label>Relay server</label>
+            <input type="text" id="relay-input" value="" placeholder="localhost:77"/>
+            <div class="hint">Auto-detected from current host if empty</div>
+          </div>
+
+          <div class="field">
+            <label>Your nickname</label>
+            <input type="text" id="nick-input" placeholder="Alice" maxlength="32"/>
+          </div>
+
+          <div class="field">
+            <label>Room UUID <span style="color:var(--text3);font-size:10px;font-weight:400;text-transform:none">(leave empty to create new)</span></label>
+            <input type="text" id="room-input" placeholder="32 hex chars" maxlength="32"/>
+            <div class="hint">Full UUID — will be shown after connection</div>
+          </div>
+
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="goStep(2)">← Back</button>
+            <button class="btn btn-primary" id="connect-btn" style="flex:1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              Connect
+            </button>
+          </div>
+
+          <!-- Connecting state -->
+          <div id="connecting-state" style="display:none;flex-direction:column;align-items:center;gap:12px;margin-top:20px">
+            <div class="spinner"></div>
+            <div style="font-size:13px;color:var(--text2)">Connecting and performing handshake…</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -602,18 +481,15 @@ body::after{
     <div id="chat-header" class="hidden">
       <div>
         <div id="chat-room-name">—</div>
-        <div id="chat-room-id">—</div>
+        <div id="chat-room-id" style="cursor:pointer" title="Click to copy" onclick="copyRoomId()">—</div>
       </div>
       <div class="peer-pills" id="peer-pills"></div>
       <div id="header-actions">
-        <button class="icon-btn" id="audio-call-btn" title="Audio call">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8a19.79 19.79 0 01-3.07-8.68 2 2 0 011.99-2.18h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 6.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7a2 2 0 011.72 2.02z"/></svg>
-        </button>
-        <button class="icon-btn" id="video-call-btn" title="Video call">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        </button>
-        <button class="icon-btn" id="share-room-btn" title="Share room ID">
+        <button class="icon-btn" id="share-room-btn" title="Copy room ID" onclick="copyRoomId()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        </button>
+        <button class="icon-btn btn-danger" id="disconnect-btn" title="Disconnect" onclick="doDisconnect()" style="color:var(--danger)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
       </div>
     </div>
@@ -624,17 +500,16 @@ body::after{
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
       </svg>
       <h3>No room selected</h3>
-      <p>Click + to create a new room or connect to an existing one.</p>
+      <p>Connect to get started or click + to add another room.</p>
     </div>
 
-    <!-- Messages wrap -->
+    <!-- Messages -->
     <div id="messages-wrap" style="display:none">
       <div id="messages"></div>
     </div>
+    <div id="typing-indicator" style="padding:6px 20px;font-size:12px;color:var(--text3);min-height:24px"></div>
 
-    <div id="typing-indicator"></div>
-
-    <!-- Input area -->
+    <!-- Input -->
     <div id="input-area" class="hidden">
       <div id="attach-preview"></div>
       <div id="input-bar">
@@ -643,8 +518,8 @@ body::after{
           <label class="input-btn" title="Attach file" for="file-input">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
           </label>
-          <input id="file-input" type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip,.tar,.gz,.json"/>
-          <button class="input-btn" id="rec-btn" title="Record voice message">
+          <input id="file-input" type="file" multiple accept="image/*,video/*,audio/*,.pdf,.txt,.zip"/>
+          <button class="input-btn" id="rec-btn" title="Record voice">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
           </button>
           <button id="send-btn" disabled title="Send">
@@ -656,49 +531,24 @@ body::after{
   </div>
 </div>
 
-<!-- Call overlay -->
-<div id="call-overlay" class="hidden">
-  <div id="call-status">Calling…</div>
-  <div id="call-peer-name">—</div>
-  <div class="call-videos">
-    <div id="remote-video"><video id="remote-vid" autoplay playsinline></video></div>
-  </div>
-  <div class="call-controls">
-    <button class="call-ctrl" id="call-mute-btn" title="Mute">🎤</button>
-    <button class="call-ctrl" id="call-cam-btn" title="Camera">📷</button>
-    <button class="call-ctrl end" id="call-end-btn" title="End call">📵</button>
-  </div>
-</div>
-<div id="local-video" class="hidden"><video id="local-vid" autoplay playsinline muted></video></div>
-
-<!-- Incoming call -->
-<div id="incoming-call" class="hidden">
-  <h4>📞 Incoming <span id="incoming-call-type">audio</span> call</h4>
-  <p>from <strong id="incoming-peer-name">—</strong></p>
-  <div class="incoming-actions">
-    <button class="btn btn-sm btn-danger" id="reject-call-btn">Decline</button>
-    <button class="btn btn-sm btn-primary" id="accept-call-btn">Accept</button>
-  </div>
-</div>
-
 <!-- Lightbox -->
 <div id="lightbox" class="hidden">
   <img id="lightbox-img" src="" alt=""/>
   <button id="lightbox-close">✕</button>
 </div>
 
-<!-- New room modal -->
+<!-- Add room modal -->
 <div id="modal-overlay" class="hidden">
   <div class="modal">
     <h3>Add room</h3>
-    <p>Connect to an existing room or create a new one.</p>
+    <p>Join an existing room or create a new one.</p>
     <div class="field">
       <label>Room ID</label>
-      <input id="modal-room-input" type="text" placeholder="32 hex chars (empty = new room)"/>
+      <input type="text" id="modal-room-input" placeholder="32 hex chars (empty = new room)"/>
     </div>
     <div class="field">
-      <label>Room nickname</label>
-      <input id="modal-room-nick" type="text" placeholder="Work, Friends…" maxlength="24"/>
+      <label>Room name</label>
+      <input type="text" id="modal-room-nick" placeholder="Work, Friends…" maxlength="24"/>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" id="modal-cancel-btn">Cancel</button>
@@ -710,43 +560,44 @@ body::after{
 <div id="toasts"></div>
 
 <script>
-// ═══════════════════════════════════════════════════════════════════════
-// SGTP Web Client
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// SGTP Web Client — full setup flow (key upload, whitelist, connect)
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ── State ──────────────────────────────────────────────────────────────
+// ── Crypto state ────────────────────────────────────────────────────────────
+const crypto_state = {
+  privKeyHex: '',   // 128 hex chars (64 raw bytes: seed+pubkey)
+  pubKeyHex: '',    // 64 hex chars (32 bytes)
+  whitelistHex: [], // array of 64-hex-char strings
+};
+
+// ── App state ───────────────────────────────────────────────────────────────
 const state = {
   ws: null,
   nick: '',
   myUUID: '',
   myPubKey: '',
-  rooms: [],       // [{id, roomId, name, messages, peers, unread, ws}]
+  rooms: [],
   activeRoomIdx: -1,
-  pending: {},     // fileId → {chunks, name, mime, size, rcvd}
+  pending: {},
   recMediaRec: null,
   recChunks: [],
   recTimer: null,
   recSecs: 0,
-  attachFiles: [], // {file, dataURL}
-  activeCall: null,  // {callId, peerId, type, pc, stream}
-  pendingCall: null, // incoming offer
-  mutedMic: false,
-  mutedCam: false,
+  attachFiles: [],
+  currentStep: 1,
 };
 
-// ── Utilities ──────────────────────────────────────────────────────────
+// ── Utilities ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const fmt = s => s ? s.substring(0,8)+'…' : '??';
-const fmtTime = ts => {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-};
+const fmtTime = ts => new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 const fmtSize = b => b<1024?b+'B':b<1<<20?(b/1024).toFixed(1)+'KB':(b/1024/1024).toFixed(1)+'MB';
 const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 function toast(msg, type='') {
   const el = document.createElement('div');
-  el.className = 'toast' + (type?' '+type:'');
+  el.className = 'toast'+(type?' '+type:'');
   el.textContent = msg;
   $('toasts').appendChild(el);
   setTimeout(()=>el.remove(), 3100);
@@ -761,65 +612,309 @@ function avatarColor(uuid) {
   return colors[i];
 }
 
-function makeAvatar(uuid, nick) {
-  const [fg,bg] = avatarColor(uuid);
-  const letter = (nick||uuid||'?')[0].toUpperCase();
-  return `<div class="identity-avatar" style="background:${bg};color:${fg}">${letter}</div>`;
+// ── OpenSSH key parser (browser-side, no server needed) ──────────────────────
+
+function readUint32(view, offset) {
+  return { val: view.getUint32(offset, false), next: offset + 4 };
 }
 
-// ── WebSocket connection ───────────────────────────────────────────────
-function connectWS(callback) {
+function readString(view, offset) {
+  const len = view.getUint32(offset, false);
+  offset += 4;
+  const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, len);
+  return { val: bytes, next: offset + len };
+}
+
+function parseOpenSshPrivateKey(bytes) {
+  const magic = 'openssh-key-v1\x00';
+  const magicBytes = new TextEncoder().encode(magic);
+  for (let i = 0; i < magicBytes.length; i++) {
+    if (bytes[i] !== magicBytes[i]) throw new Error('Not an OpenSSH private key');
+  }
+
+  const view = new DataView(bytes.buffer, bytes.byteOffset);
+  let offset = magicBytes.length;
+
+  // cipher, kdf, kdf_options
+  let r = readString(view, offset); offset = r.next; // cipher
+  r = readString(view, offset); offset = r.next;     // kdf
+  r = readString(view, offset); offset = r.next;     // kdf_options
+
+  // num_keys
+  const numKeys = view.getUint32(offset, false); offset += 4;
+  if (numKeys !== 1) throw new Error('Expected 1 key');
+
+  // public key block
+  r = readString(view, offset); offset = r.next;
+  const pubBlock = r.val;
+
+  // private key block
+  r = readString(view, offset); offset = r.next;
+  const privBlock = r.val;
+
+  // Parse public block
+  const pubView = new DataView(pubBlock.buffer, pubBlock.byteOffset);
+  let po = 0;
+  let pr = readString(pubView, po); po = pr.next; // key type
+  const keyType = new TextDecoder().decode(pr.val);
+  if (keyType !== 'ssh-ed25519') throw new Error('Expected ssh-ed25519, got ' + keyType);
+  pr = readString(pubView, po); // public key (32 bytes)
+  const pubKey = pr.val;
+
+  // Parse private block
+  const privView = new DataView(privBlock.buffer, privBlock.byteOffset);
+  let pv = 0;
+  const check1 = privView.getUint32(pv, false); pv += 4;
+  const check2 = privView.getUint32(pv, false); pv += 4;
+  if (check1 !== check2) throw new Error('Private key check failed (wrong passphrase?)');
+
+  pr = readString(privView, pv); pv = pr.next; // key type
+  pr = readString(privView, pv); pv = pr.next; // public key again
+  pr = readString(privView, pv);               // 64-byte private key (seed+pub)
+  const privKey64 = pr.val;
+  if (privKey64.length < 32) throw new Error('Private key too short');
+
+  return { pubKey, privKey64 };
+}
+
+function parseOpenSshPublicKeyLine(line) {
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < 2 || parts[0] !== 'ssh-ed25519') return null;
+  try {
+    const decoded = Uint8Array.from(atob(parts[1]), c => c.charCodeAt(0));
+    const view = new DataView(decoded.buffer);
+    let r = readString(view, 0);
+    const type = new TextDecoder().decode(r.val);
+    if (type !== 'ssh-ed25519') return null;
+    r = readString(view, r.next);
+    if (r.val.length !== 32) return null;
+    return r.val;
+  } catch(e) { return null; }
+}
+
+function uint8ToHex(arr) {
+  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// ── Step navigation ───────────────────────────────────────────────────────────
+
+function goStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    $('step-'+i).style.display = i === n ? '' : 'none';
+  }
+  const dots = $('step-dots').querySelectorAll('.step-dot');
+  dots.forEach((d, i) => {
+    d.className = 'step-dot';
+    if (i+1 < n) d.classList.add('done');
+    else if (i+1 === n) d.classList.add('active');
+  });
+  state.currentStep = n;
+}
+
+// ── Step 1: private key upload ────────────────────────────────────────────────
+
+function setupKeyZone() {
+  const input = $('key-file-input');
+  const zone = $('key-zone');
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) loadKeyFile(e.dataTransfer.files[0]);
+  });
+
+  input.addEventListener('change', () => { if (input.files[0]) loadKeyFile(input.files[0]); });
+}
+
+function loadKeyFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const bytes = new Uint8Array(e.target.result);
+      const { pubKey, privKey64 } = parseOpenSshPrivateKey(bytes);
+      crypto_state.privKeyHex = uint8ToHex(privKey64);
+      crypto_state.pubKeyHex = uint8ToHex(pubKey);
+
+      $('key-zone').classList.add('ok');
+      $('key-zone-title').textContent = '✓ ' + file.name;
+      $('my-pubkey-box').style.display = '';
+      $('my-pubkey-box').textContent = crypto_state.pubKeyHex;
+      $('my-pubkey-label').style.display = '';
+      $('step1-next').disabled = false;
+
+      // Add own key to whitelist automatically
+      if (!crypto_state.whitelistHex.includes(crypto_state.pubKeyHex)) {
+        crypto_state.whitelistHex.push(crypto_state.pubKeyHex);
+      }
+    } catch(err) {
+      toast('Failed to parse key: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+$('my-pubkey-box').onclick = () => {
+  navigator.clipboard.writeText(crypto_state.pubKeyHex)
+    .then(() => toast('Public key copied!', 'success'));
+};
+
+$('step1-next').onclick = () => goStep(2);
+
+// ── Step 2: whitelist upload ──────────────────────────────────────────────────
+
+function setupWlZone() {
+  const input = $('wl-file-input');
+  const zone = $('wl-zone');
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    loadWlFiles(e.dataTransfer.files);
+  });
+
+  input.addEventListener('change', () => { if (input.files.length) loadWlFiles(input.files); });
+}
+
+async function loadWlFiles(files) {
+  let loaded = 0;
+  for (const file of files) {
+    try {
+      const text = await file.text();
+      // Try as OpenSSH .pub line
+      for (const line of text.split('\n')) {
+        const pub = parseOpenSshPublicKeyLine(line);
+        if (pub) {
+          const hex = uint8ToHex(pub);
+          if (!crypto_state.whitelistHex.includes(hex)) {
+            crypto_state.whitelistHex.push(hex);
+            loaded++;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  if (loaded > 0) {
+    $('wl-zone').classList.add('ok');
+    $('wl-zone-title').textContent = `✓ ${crypto_state.whitelistHex.length} key(s) loaded`;
+    toast(`Loaded ${loaded} key(s)`, 'success');
+  } else {
+    toast('No valid ed25519 keys found', 'error');
+  }
+}
+
+$('step2-next').onclick = () => goStep(3);
+
+// ── Step 3: connect ───────────────────────────────────────────────────────────
+
+function detectRelay() {
+  // Auto-detect relay: same host, port from URL or default
+  const wsPort = location.port || '5735';
+  $('relay-input').placeholder = location.hostname + ':77';
+  return location.hostname + ':77';
+}
+
+$('connect-btn').onclick = () => {
+  const relay = $('relay-input').value.trim() || detectRelay();
+  const nick = $('nick-input').value.trim() || 'Anon';
+  const room = $('room-input').value.trim().replace(/-/g, '');
+
+  $('connect-btn').style.display = 'none';
+  $('connecting-state').style.display = 'flex';
+
   const wsHost = location.hostname;
-  const wsPort = location.port || '8080';
-  const url = `ws://${wsHost}:${wsPort}/ws`;
-  const ws = new WebSocket(url);
+  const wsPort = location.port || '5735';
+  const wsUrl = `ws://${wsHost}:${wsPort}/ws`;
+
+  const ws = new WebSocket(wsUrl);
   state.ws = ws;
 
   ws.onopen = () => {
-    console.log('[ws] connected');
-    if (callback) callback(ws);
+    ws.send(JSON.stringify({
+      cmd: 'init',
+      server: relay,
+      room: room,
+      nick: nick,
+      key: crypto_state.privKeyHex,
+      whitelist_keys: crypto_state.whitelistHex,
+    }));
   };
   ws.onmessage = e => {
     try { handleBridgeEvent(JSON.parse(e.data)); }
     catch(err) { console.error('[ws] parse error', err); }
   };
-  ws.onerror = () => toast('WebSocket error', 'error');
-  ws.onclose = () => {
-    toast('Disconnected from bridge', 'error');
-    $('my-status').className='identity-status';
-    state.ws = null;
+  ws.onerror = () => {
+    toast('WebSocket error — check bridge is running', 'error');
+    resetConnecting();
   };
-  return ws;
+  ws.onclose = () => {
+    if (state.myUUID) {
+      toast('Disconnected from bridge', 'error');
+      $('my-status').className = 'identity-status';
+      state.ws = null;
+    } else {
+      resetConnecting();
+    }
+  };
+};
+
+function resetConnecting() {
+  $('connect-btn').style.display = '';
+  $('connecting-state').style.display = 'none';
 }
 
-function sendCmd(cmd) {
-  if (!state.ws || state.ws.readyState!==WebSocket.OPEN) {
-    toast('Not connected to bridge', 'error'); return;
+function doDisconnect() {
+  if (state.ws) {
+    state.ws.send(JSON.stringify({cmd:'quit'}));
+    state.ws.close();
+    state.ws = null;
   }
-  state.ws.send(JSON.stringify(cmd));
+  state.myUUID = '';
+  state.rooms = [];
+  state.activeRoomIdx = -1;
+  $('my-status').className = 'identity-status';
+  $('my-nick').textContent = 'Not connected';
+  $('my-uuid').textContent = '—';
+  $('chat-header').classList.add('hidden');
+  $('input-area').classList.add('hidden');
+  $('messages-wrap').style.display = 'none';
+  $('empty-state').style.display = '';
+  $('setup-screen').classList.remove('hidden');
+  $('send-btn').disabled = true;
+  renderSidebar();
+  // Go back to step 3 (key and whitelist are kept)
+  goStep(3);
+  resetConnecting();
 }
 
-// ── Bridge event handler ───────────────────────────────────────────────
+// ── Bridge event handler ──────────────────────────────────────────────────────
+
 function handleBridgeEvent(ev) {
   switch(ev.evt) {
     case 'ready':      onReady(ev); break;
     case 'peer_join':  onPeerJoin(ev); break;
-    case 'peer_leave': onPeerLeave(ev, false); break;
-    case 'peer_kick':  onPeerLeave(ev, true); break;
+    case 'peer_leave':
+    case 'peer_kick':  onPeerLeave(ev); break;
     case 'msg':        onMsg(ev, false); break;
     case 'msg_echo':   onMsg(ev, true); break;
-    case 'msg_failed': onMsgFailed(ev); break;
-    case 'ck_rotated': onCKRotated(); break;
-    case 'error':      toast(ev.msg||'Unknown error', 'error'); break;
+    case 'msg_failed': toast('Message rejected (CK rotation)', 'error'); break;
+    case 'ck_rotated': toast('🔑 Chat key rotated'); break;
+    case 'error':
+      toast(ev.msg || 'Error', 'error');
+      resetConnecting();
+      break;
   }
 }
 
 function onReady(ev) {
   state.myUUID = ev.uuid;
-  state.myPubKey = ev.pubkey;
+  state.myPubKey = ev.pubkey || crypto_state.pubKeyHex;
   state.nick = ev.nick || fmt(ev.uuid);
 
-  // Update identity bar
   const [fg,bg] = avatarColor(ev.uuid);
   $('my-avatar').style.cssText = `background:${bg};color:${fg}`;
   $('my-avatar').textContent = state.nick[0].toUpperCase();
@@ -827,20 +922,21 @@ function onReady(ev) {
   $('my-uuid').textContent = fmt(ev.uuid);
   $('my-status').className = 'identity-status online';
 
-  // Register room
   const roomId = ev.room;
   let room = state.rooms.find(r => r.roomId === roomId);
   if (!room) {
-    room = {roomId, name: $('modal-room-nick').value || 'Room '+fmt(roomId), messages:[], peers:{}, unread:0};
+    const name = $('modal-room-nick').value || 'Room ' + fmt(roomId);
+    room = {roomId, name, messages:[], peers:{}, unread:0};
     state.rooms.push(room);
   }
-  room.myUUID = ev.uuid;
   const idx = state.rooms.indexOf(room);
   state.activeRoomIdx = idx;
 
+  $('setup-screen').classList.add('hidden');
   renderSidebar();
   selectRoom(idx);
-  toast('Connected · '+fmt(roomId), 'success');
+  $('send-btn').disabled = false;
+  toast('Connected · ' + fmt(roomId), 'success');
 }
 
 function onPeerJoin(ev) {
@@ -852,13 +948,13 @@ function onPeerJoin(ev) {
   renderSidebar();
 }
 
-function onPeerLeave(ev, kicked) {
+function onPeerLeave(ev) {
   const room = state.rooms[state.activeRoomIdx];
   if (!room) return;
   const peer = room.peers[ev.uuid];
   const label = peer?.nick || fmt(ev.uuid);
   delete room.peers[ev.uuid];
-  addSysMsg(room, kicked ? `⚠ ${label} was kicked` : `👋 ${label} left`);
+  addSysMsg(room, `👋 ${label} left`);
   renderPeerPills(room);
 }
 
@@ -866,64 +962,26 @@ function onMsg(ev, isMine) {
   const room = state.rooms[state.activeRoomIdx];
   if (!room) return;
   const payload = ev.payload || {};
-
-  const msg = {
-    id: ev.uuid,
-    from: ev.from,
-    ts: ev.ts || Date.now(),
-    seq: ev.seq,
-    mine: isMine,
-    payload,
-    failed: false,
-  };
+  const msg = {id:ev.uuid, from:ev.from, ts:ev.ts||Date.now(), seq:ev.seq, mine:isMine, payload, failed:false};
   room.messages.push(msg);
-
-  if (!isMine && state.activeRoomIdx !== -1) {
-    // count unread only if not in view (simplified: always show)
-  }
-
   renderMessage(room, msg);
   scrollToBottom();
-
-  // Handle file chunks
-  if (payload.file_id && payload.chunks > 1) {
-    handleChunk(payload, room);
-  }
-  // Handle call signals
-  if (payload.type === 'call_offer') onCallOffer(ev.from, payload);
-  if (payload.type === 'call_answer') onCallAnswer(payload);
-  if (payload.type === 'call_ice') onCallIce(payload);
-  if (payload.type === 'call_hangup' || payload.type === 'call_reject') onCallHangup();
+  if (payload.file_id && payload.chunks > 1) handleChunk(payload, room);
 }
 
-function onMsgFailed(ev) {
-  const room = state.rooms[state.activeRoomIdx];
-  if (!room) return;
-  const msg = room.messages.find(m => m.id === ev.uuid);
-  if (msg) {
-    msg.failed = true;
-    renderMessages(room); // re-render
-  }
-  toast('Message delivery failed (CK rotation)', 'error');
-}
+// ── Render ────────────────────────────────────────────────────────────────────
 
-function onCKRotated() {
-  toast('🔑 Chat key rotated');
-}
-
-// ── Render ─────────────────────────────────────────────────────────────
 function renderSidebar() {
   const list = $('rooms-list');
   list.innerHTML = '';
   state.rooms.forEach((room, i) => {
-    const peerCount = Object.keys(room.peers||{}).length;
     const last = room.messages[room.messages.length-1];
     let lastText = '';
     if (last) {
       const p = last.payload;
       if (p.type==='text') lastText = p.text?.substring(0,40)||'';
       else if (p.type==='image') lastText = '🖼 Image';
-      else if (p.type==='audio') lastText = '🎤 Voice message';
+      else if (p.type==='audio') lastText = '🎤 Voice';
       else if (p.type==='video') lastText = '🎬 Video';
       else if (p.type==='file') lastText = '📎 '+p.name;
     }
@@ -936,7 +994,6 @@ function renderSidebar() {
         <div class="room-name">${escHtml(room.name)}</div>
         <div class="room-last">${escHtml(lastText)||'No messages yet'}</div>
       </div>
-      ${room.unread>0?`<div class="room-badge">${room.unread}</div>`:''}
     </div>`;
   });
 }
@@ -956,12 +1013,19 @@ function selectRoom(idx) {
   $('chat-header').classList.remove('hidden');
   $('input-area').classList.remove('hidden');
   $('chat-room-name').textContent = room.name;
+  // Show full UUID
   $('chat-room-id').textContent = room.roomId;
   room.unread = 0;
   renderMessages(room);
   renderPeerPills(room);
   scrollToBottom();
-  $('send-btn').disabled = !state.myUUID;
+  renderSidebar();
+}
+
+function copyRoomId() {
+  const room = state.rooms[state.activeRoomIdx];
+  if (!room) return;
+  navigator.clipboard.writeText(room.roomId).then(() => toast('Room UUID copied!', 'success'));
 }
 
 function renderPeerPills(room) {
@@ -972,8 +1036,7 @@ function renderPeerPills(room) {
 }
 
 function renderMessages(room) {
-  const el = $('messages');
-  el.innerHTML = '';
+  $('messages').innerHTML = '';
   room.messages.forEach(msg => renderMessage(room, msg, false));
 }
 
@@ -981,7 +1044,7 @@ function renderMessage(room, msg, scroll=true) {
   const el = $('messages');
   const {from, mine, ts, payload, failed, id} = msg;
   const nick = mine ? state.nick : (room.peers[from]?.nick || fmt(from));
-  const [fg,bg] = avatarColor(from);
+  const [fg,bg] = avatarColor(mine ? state.myUUID : from);
 
   if (payload.type === 'system') {
     el.innerHTML += `<div class="sys-msg">${escHtml(payload.text||'')}</div>`;
@@ -990,103 +1053,80 @@ function renderMessage(room, msg, scroll=true) {
   }
 
   const row = document.createElement('div');
-  row.className = 'msg-row' + (mine?' mine':'');
+  row.className = 'msg-row'+(mine?' mine':'');
   row.dataset.id = id;
 
   const avatarHtml = `<div class="msg-avatar" style="background:${bg};color:${fg}">${nick[0].toUpperCase()}</div>`;
-  const timeHtml = `<span>${fmtTime(ts)}</span>`;
-  const failedClass = failed ? ' msg-failed':'';
 
   let bubbleContent = '';
   if (payload.type === 'text') {
-    bubbleContent = `<div class="bubble-inner${failedClass}">
+    bubbleContent = `<div class="bubble-inner${failed?' msg-failed':''}">
       ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
       ${escHtml(payload.text||'').replace(/\n/g,'<br>')}
     </div>`;
-  } else if (payload.type === 'image') {
-    if (payload.data) {
-      const src = `data:${payload.mime||'image/jpeg'};base64,${payload.data}`;
-      bubbleContent = `<div class="bubble-inner" style="padding:4px">
-        ${!mine?`<div class="msg-sender" style="padding:4px 4px 2px">${escHtml(nick)}</div>`:''}
-        <div class="img-bubble" onclick="openLightbox('${src}')">
-          <img src="${src}" alt="${escHtml(payload.name||'')}"/>
-          <div class="img-overlay"><svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+  } else if (payload.type === 'image' && payload.data) {
+    const src = `data:${payload.mime||'image/jpeg'};base64,${payload.data}`;
+    bubbleContent = `<div class="bubble-inner" style="padding:4px">
+      ${!mine?`<div class="msg-sender" style="padding:4px 4px 2px">${escHtml(nick)}</div>`:''}
+      <div class="img-bubble" onclick="openLightbox('${src}')">
+        <img src="${src}" alt=""/>
+        <div class="img-overlay"><svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+      </div>
+    </div>`;
+  } else if (payload.type === 'audio' && payload.data) {
+    const src = `data:${payload.mime||'audio/webm'};base64,${payload.data}`;
+    const audioId = 'aud-'+id;
+    const dur = payload.duration ? fmtDur(payload.duration) : '0:00';
+    bubbleContent = `<div class="bubble-inner" style="padding:6px 10px">
+      ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
+      <audio id="${audioId}" src="${src}" preload="none"></audio>
+      <div class="audio-bubble">
+        <button class="play-btn" onclick="toggleAudio('${audioId}',this)">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div class="audio-wave" id="wave-${audioId}">${waveHtml()}</div>
+        <span class="audio-time">${dur}</span>
+      </div>
+    </div>`;
+  } else if ((payload.type === 'file' || payload.type === 'video') && payload.data) {
+    const href = `data:${payload.mime||'application/octet-stream'};base64,${payload.data}`;
+    bubbleContent = `<div class="bubble-inner" style="padding:6px 10px">
+      ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
+      <a class="file-bubble" href="${href}" download="${escHtml(payload.name||'file')}">
+        ${fileIconSVG(payload.mime)}
+        <div class="file-info">
+          <div class="file-name">${escHtml(payload.name||'file')}</div>
+          <div class="file-size">${fmtSize(payload.size||0)}</div>
         </div>
-      </div>`;
-    } else {
-      bubbleContent = filePlaceholder(mine, nick, payload, id);
-    }
-  } else if (payload.type === 'audio') {
-    if (payload.data) {
-      const src = `data:${payload.mime||'audio/ogg'};base64,${payload.data}`;
-      const dur = payload.duration ? fmtDur(payload.duration) : '—';
-      const audioId = 'aud-'+id;
-      bubbleContent = `<div class="bubble-inner" style="padding:6px 10px">
-        ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
-        <audio id="${audioId}" src="${src}" preload="none"></audio>
-        <div class="audio-bubble">
-          <button class="play-btn" onclick="toggleAudio('${audioId}',this)">
-            <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          </button>
-          <div class="audio-wave" id="wave-${audioId}">${waveHtml()}</div>
-          <span class="audio-time">${dur}</span>
-        </div>
-      </div>`;
-    } else {
-      bubbleContent = filePlaceholder(mine, nick, payload, id);
-    }
-  } else if (payload.type === 'file' || payload.type === 'video') {
-    if (payload.data) {
-      const href = `data:${payload.mime||'application/octet-stream'};base64,${payload.data}`;
-      bubbleContent = `<div class="bubble-inner" style="padding:6px 10px">
-        ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
-        <a class="file-bubble" href="${href}" download="${escHtml(payload.name||'file')}">
-          ${fileIconSVG(payload.mime)}
-          <div class="file-info">
-            <div class="file-name">${escHtml(payload.name||'file')}</div>
-            <div class="file-size">${fmtSize(payload.size||0)}</div>
-          </div>
-        </a>
-      </div>`;
-    } else {
-      bubbleContent = filePlaceholder(mine, nick, payload, id);
-    }
-  } else if (payload.type?.startsWith('call_')) {
-    // Show call card
-    const icons = {call_offer:'📞', call_answer:'✅', call_hangup:'📵', call_reject:'❌', call_ice:''};
-    const labels = {call_offer:`${nick} is calling (${payload.call_type||'audio'})`, call_answer:`Call accepted`, call_hangup:'Call ended', call_reject:'Call declined'};
-    if (!labels[payload.type]) return; // skip ICE from UI
+      </a>
+    </div>`;
+  } else if (payload.file_id) {
+    // Chunked file placeholder
     bubbleContent = `<div class="bubble-inner">
-      <span style="font-size:18px">${icons[payload.type]||'📞'}</span>
-      <span style="margin-left:8px;color:var(--text2);font-size:13px">${labels[payload.type]||''}</span>
+      ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
+      <div class="file-bubble" id="fp-${payload.file_id}">
+        ${fileIconSVG(payload.mime)}
+        <div class="file-info">
+          <div class="file-name">${escHtml(payload.name||'file')}</div>
+          <div class="file-size">${fmtSize(payload.size||0)} · receiving…</div>
+          <div class="progress-bar"><div class="progress-fill" id="pb-${payload.file_id}" style="width:0%"></div></div>
+        </div>
+      </div>
     </div>`;
   } else {
-    return;
+    return; // unknown type
   }
 
   row.innerHTML = `
     ${!mine ? avatarHtml : ''}
     <div class="bubble">
       ${bubbleContent}
-      <div class="bubble-meta">${timeHtml}</div>
+      <div class="bubble-meta"><span>${fmtTime(ts)}</span></div>
     </div>
     ${mine ? avatarHtml : ''}
   `;
   el.appendChild(row);
-}
-
-function filePlaceholder(mine, nick, payload, id) {
-  return `<div class="bubble-inner">
-    ${!mine?`<div class="msg-sender">${escHtml(nick)}</div>`:''}
-    <div class="file-bubble" id="fp-${id}">
-      ${fileIconSVG(payload.mime)}
-      <div class="file-info">
-        <div class="file-name">${escHtml(payload.name||'file')}</div>
-        <div class="file-size">${fmtSize(payload.size||0)} · downloading…</div>
-        <div class="progress-bar"><div class="progress-fill" id="pb-${id}" style="width:0%"></div></div>
-      </div>
-    </div>
-  </div>`;
+  if (scroll) scrollToBottom();
 }
 
 function fileIconSVG(mime) {
@@ -1099,11 +1139,9 @@ function fileIconSVG(mime) {
 }
 
 function waveHtml() {
-  const bars = 28;
   let html = '';
-  for (let i=0;i<bars;i++){
-    const h = Math.max(20, Math.random()*80);
-    html += `<div class="wave-bar" style="height:${h}%"></div>`;
+  for (let i=0;i<28;i++) {
+    html += `<div class="wave-bar" style="height:${Math.max(20,Math.random()*80)}%"></div>`;
   }
   return html;
 }
@@ -1119,28 +1157,24 @@ function addSysMsg(room, text) {
 
 function scrollToBottom() {
   const el = $('messages');
-  el.scrollTop = el.scrollHeight;
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
 }
 
-// ── File chunks ────────────────────────────────────────────────────────
+// ── File chunks ───────────────────────────────────────────────────────────────
+
 function handleChunk(payload, room) {
   const {file_id, chunk, chunks, name, mime, size, data} = payload;
   if (!state.pending[file_id]) {
-    state.pending[file_id] = {chunks:new Array(chunks).fill(null), name, mime, size, rcvd:0};
+    state.pending[file_id] = {parts:new Array(chunks).fill(null), name, mime, size, rcvd:0};
   }
   const p = state.pending[file_id];
-  p.chunks[chunk] = data;
+  p.parts[chunk] = data;
   p.rcvd++;
-
-  // Update progress bar
   const pb = $('pb-'+file_id);
   if (pb) pb.style.width = Math.round(p.rcvd/chunks*100)+'%';
-
   if (p.rcvd === chunks) {
-    // All chunks received — assemble
-    const full = p.chunks.join('');
+    const full = p.parts.join('');
     delete state.pending[file_id];
-    // Find placeholder and replace
     const fp = $('fp-'+file_id);
     if (fp) {
       const href = `data:${mime};base64,${full}`;
@@ -1152,11 +1186,19 @@ function handleChunk(payload, room) {
         </div>
       </a>`;
     }
-    toast(`📎 ${name} ready`);
+    toast('📎 '+name+' ready');
   }
 }
 
-// ── Send ───────────────────────────────────────────────────────────────
+// ── Send ──────────────────────────────────────────────────────────────────────
+
+function sendCmd(cmd) {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    toast('Not connected', 'error'); return;
+  }
+  state.ws.send(JSON.stringify(cmd));
+}
+
 function sendText(text) {
   sendCmd({cmd:'msg', payload:{v:1,type:'text',text}});
 }
@@ -1165,17 +1207,14 @@ function sendFiles(files) {
   for (const {file, dataURL} of files) {
     const base64 = dataURL.split(',')[1];
     const type = file.type.startsWith('image/')? 'image' : file.type.startsWith('audio/')? 'audio' : file.type.startsWith('video/')? 'video' : 'file';
-    const CHUNK = 8*1024*1024*3/4; // ~6MiB raw before base64 expansion
-
+    const CHUNK = 6 * 1024 * 1024; // 6MiB base64 chunk
     if (base64.length <= CHUNK) {
       sendCmd({cmd:'msg', payload:{v:1,type,file_id:genId(),name:file.name,mime:file.type,size:file.size,data:base64}});
     } else {
-      // chunk
       const fileId = genId();
       const chunks = Math.ceil(base64.length/CHUNK);
       for (let i=0;i<chunks;i++) {
-        const chunk = base64.slice(i*CHUNK,(i+1)*CHUNK);
-        sendCmd({cmd:'msg', payload:{v:1,type,file_id:fileId,name:file.name,mime:file.type,size:file.size,chunk:i,chunks,data:chunk}});
+        sendCmd({cmd:'msg', payload:{v:1,type,file_id:fileId,name:file.name,mime:file.type,size:file.size,chunk:i,chunks,data:base64.slice(i*CHUNK,(i+1)*CHUNK)}});
       }
     }
   }
@@ -1185,7 +1224,8 @@ function genId() {
   return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)+Date.now().toString(36);
 }
 
-// ── Audio recording ────────────────────────────────────────────────────
+// ── Audio ─────────────────────────────────────────────────────────────────────
+
 async function startRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({audio:true});
@@ -1196,31 +1236,24 @@ async function startRecording() {
     rec.onstop = async () => {
       stream.getTracks().forEach(t=>t.stop());
       const blob = new Blob(state.recChunks, {type:'audio/webm'});
-      const dur = state.recSecs;
       const reader = new FileReader();
       reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        sendCmd({cmd:'msg', payload:{v:1,type:'audio',file_id:genId(),name:'voice.webm',mime:'audio/webm',size:blob.size,duration:dur,data:base64}});
+        sendCmd({cmd:'msg', payload:{v:1,type:'audio',file_id:genId(),name:'voice.webm',mime:'audio/webm',size:blob.size,duration:state.recSecs,data:reader.result.split(',')[1]}});
       };
       reader.readAsDataURL(blob);
       clearInterval(state.recTimer);
       $('rec-btn').classList.remove('recording');
-      $('rec-btn').title = 'Record voice message';
     };
     rec.start(200);
     state.recMediaRec = rec;
-    state.recTimer = setInterval(()=>state.recSecs++, 1000);
+    state.recTimer = setInterval(()=>state.recSecs++,1000);
     $('rec-btn').classList.add('recording');
-    $('rec-btn').title = 'Stop recording';
   } catch(e) {
-    toast('Microphone access denied', 'error');
+    toast('Microphone denied', 'error');
   }
 }
 
-function stopRecording() {
-  state.recMediaRec?.stop();
-  state.recMediaRec = null;
-}
+function stopRecording() { state.recMediaRec?.stop(); state.recMediaRec = null; }
 
 function toggleAudio(id, btn) {
   const aud = document.getElementById(id);
@@ -1230,10 +1263,7 @@ function toggleAudio(id, btn) {
     aud.play();
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="var(--bg)"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     wave.classList.add('playing');
-    aud.onended = () => {
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="var(--bg)"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-      wave.classList.remove('playing');
-    };
+    aud.onended = () => { btn.innerHTML = '<svg viewBox="0 0 24 24" fill="var(--bg)"><polygon points="5 3 19 12 5 21 5 3"/></svg>'; wave.classList.remove('playing'); };
   } else {
     aud.pause();
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="var(--bg)"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
@@ -1246,141 +1276,15 @@ function fmtDur(s) {
   return `${m}:${sec.toString().padStart(2,'0')}`;
 }
 
-// ── WebRTC calls ───────────────────────────────────────────────────────
-async function startCall(type) {
-  if (!state.myUUID) { toast('Not connected', 'error'); return; }
-  const room = state.rooms[state.activeRoomIdx];
-  if (!room || !Object.keys(room.peers).length) { toast('No peers in room', 'error'); return; }
+// ── Lightbox ──────────────────────────────────────────────────────────────────
 
-  const callId = genId();
-  const pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-
-  state.activeCall = {callId, type, pc, stream:null};
-
-  // Get local media
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: type === 'video',
-    });
-    state.activeCall.stream = stream;
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
-    $('local-vid').srcObject = stream;
-    $('local-video').classList.remove('hidden');
-  } catch(e) {
-    toast('Camera/mic access denied', 'error');
-    return;
-  }
-
-  pc.ontrack = e => {
-    $('remote-vid').srcObject = e.streams[0];
-  };
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      sendCmd({cmd:'msg', payload:{v:1,type:'call_ice',call_id:callId,candidate:e.candidate}});
-    }
-  };
-  pc.onconnectionstatechange = () => {
-    if (pc.connectionState === 'connected') {
-      $('call-status').textContent = 'Connected';
-    }
-  };
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  sendCmd({cmd:'msg', payload:{v:1,type:'call_offer',call_id:callId,call_type:type,sdp:offer.sdp}});
-
-  showCallOverlay('Calling…', type);
-}
-
-function onCallOffer(fromUUID, payload) {
-  if (state.activeCall) return; // already in a call
-  const room = state.rooms[state.activeRoomIdx];
-  const peerNick = room?.peers[fromUUID]?.nick || fmt(fromUUID);
-  state.pendingCall = {fromUUID, payload};
-  $('incoming-call-type').textContent = payload.call_type || 'audio';
-  $('incoming-peer-name').textContent = peerNick;
-  $('incoming-call').classList.remove('hidden');
-}
-
-async function acceptCall() {
-  $('incoming-call').classList.add('hidden');
-  const {fromUUID, payload} = state.pendingCall || {};
-  state.pendingCall = null;
-  if (!payload) return;
-
-  const pc = new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
-  state.activeCall = {callId: payload.call_id, type: payload.call_type, pc, stream:null};
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: payload.call_type === 'video',
-    });
-    state.activeCall.stream = stream;
-    stream.getTracks().forEach(t => pc.addTrack(t, stream));
-    $('local-vid').srcObject = stream;
-    $('local-video').classList.remove('hidden');
-  } catch(e) { toast('Media access denied','error'); }
-
-  pc.ontrack = e => { $('remote-vid').srcObject = e.streams[0]; };
-  pc.onicecandidate = e => {
-    if (e.candidate) sendCmd({cmd:'msg', payload:{v:1,type:'call_ice',call_id:payload.call_id,candidate:e.candidate}});
-  };
-
-  await pc.setRemoteDescription({type:'offer', sdp:payload.sdp});
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  sendCmd({cmd:'msg', payload:{v:1,type:'call_answer',call_id:payload.call_id,sdp:answer.sdp}});
-
-  showCallOverlay('Connected', payload.call_type);
-}
-
-async function onCallAnswer(payload) {
-  if (!state.activeCall || state.activeCall.callId !== payload.call_id) return;
-  await state.activeCall.pc.setRemoteDescription({type:'answer', sdp:payload.sdp});
-  $('call-status').textContent = 'Connected';
-}
-
-async function onCallIce(payload) {
-  if (!state.activeCall || state.activeCall.callId !== payload.call_id) return;
-  try { await state.activeCall.pc.addIceCandidate(payload.candidate); } catch(e){}
-}
-
-function onCallHangup() {
-  endCall(false);
-}
-
-function endCall(notify=true) {
-  if (notify && state.activeCall) {
-    sendCmd({cmd:'msg', payload:{v:1,type:'call_hangup',call_id:state.activeCall.callId}});
-  }
-  state.activeCall?.pc?.close();
-  state.activeCall?.stream?.getTracks().forEach(t=>t.stop());
-  state.activeCall = null;
-  $('call-overlay').classList.add('hidden');
-  $('local-video').classList.add('hidden');
-  $('remote-vid').srcObject = null;
-  $('local-vid').srcObject = null;
-}
-
-function showCallOverlay(status, type) {
-  const room = state.rooms[state.activeRoomIdx];
-  $('call-status').textContent = status;
-  $('call-peer-name').textContent = room?.name || 'Room';
-  const rv = $('remote-video');
-  rv.style.display = type === 'video' ? '' : 'none';
-  $('call-overlay').classList.remove('hidden');
-}
-
-// ── Lightbox ───────────────────────────────────────────────────────────
 function openLightbox(src) {
   $('lightbox-img').src = src;
   $('lightbox').classList.remove('hidden');
 }
 
-// ── Attach files ───────────────────────────────────────────────────────
+// ── Attach files ──────────────────────────────────────────────────────────────
+
 function handleFileSelect(files) {
   for (const file of files) {
     const reader = new FileReader();
@@ -1407,26 +1311,12 @@ function renderAttachPreview() {
   });
 }
 
-function removeAttach(i) {
-  state.attachFiles.splice(i, 1);
-  renderAttachPreview();
-}
+function removeAttach(i) { state.attachFiles.splice(i,1); renderAttachPreview(); }
 
-// ── Event listeners ────────────────────────────────────────────────────
-$('connect-btn').onclick = () => {
-  const nick = $('nick-input').value.trim() || 'Anon';
-  const room = $('room-input').value.trim();
-  connectWS(ws => {
-    sendCmd({cmd:'init', room, nick});
-  });
-  $('connect-screen').classList.add('hidden');
-};
+// ── Event listeners ───────────────────────────────────────────────────────────
 
 $('msg-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    doSend();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
 });
 $('msg-input').addEventListener('input', function() {
   this.style.height = 'auto';
@@ -1435,116 +1325,46 @@ $('msg-input').addEventListener('input', function() {
 $('send-btn').onclick = doSend;
 
 function doSend() {
-  if (state.attachFiles.length) {
-    sendFiles(state.attachFiles);
-    state.attachFiles = [];
-    renderAttachPreview();
-  }
+  if (state.attachFiles.length) { sendFiles(state.attachFiles); state.attachFiles=[]; renderAttachPreview(); }
   const text = $('msg-input').value.trim();
-  if (text) {
-    sendText(text);
-    $('msg-input').value = '';
-    $('msg-input').style.height = 'auto';
-  }
+  if (text) { sendText(text); $('msg-input').value=''; $('msg-input').style.height='auto'; }
 }
 
-$('rec-btn').onclick = () => {
-  if (state.recMediaRec) stopRecording();
-  else startRecording();
-};
+$('rec-btn').onclick = () => { if (state.recMediaRec) stopRecording(); else startRecording(); };
+$('file-input').onchange = e => { handleFileSelect(e.target.files); e.target.value=''; };
 
-$('file-input').onchange = e => {
-  handleFileSelect(e.target.files);
-  e.target.value='';
-};
+$('main').addEventListener('dragover', e => e.preventDefault());
+$('main').addEventListener('drop', e => { e.preventDefault(); handleFileSelect(e.dataTransfer.files); });
 
-// Drag & drop
-$('main').addEventListener('dragover', e => { e.preventDefault(); });
-$('main').addEventListener('drop', e => {
-  e.preventDefault();
-  handleFileSelect(e.dataTransfer.files);
-});
-
-$('new-room-btn').onclick = () => {
-  $('modal-overlay').classList.remove('hidden');
-  $('modal-room-input').focus();
-};
+$('new-room-btn').onclick = () => { $('modal-overlay').classList.remove('hidden'); };
 $('modal-cancel-btn').onclick = () => $('modal-overlay').classList.add('hidden');
 $('modal-join-btn').onclick = () => {
   $('modal-overlay').classList.add('hidden');
   const room = $('modal-room-input').value.trim();
   const nick = state.nick;
-  if (!state.ws || state.ws.readyState!==WebSocket.OPEN) {
-    connectWS(ws => sendCmd({cmd:'init', room, nick}));
-  } else {
-    sendCmd({cmd:'init', room, nick});
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    toast('Not connected. Connect first.', 'error'); return;
   }
-};
-
-$('audio-call-btn').onclick = () => startCall('audio');
-$('video-call-btn').onclick = () => startCall('video');
-
-$('call-end-btn').onclick = () => endCall(true);
-$('call-mute-btn').onclick = () => {
-  const stream = state.activeCall?.stream;
-  if (!stream) return;
-  state.mutedMic = !state.mutedMic;
-  stream.getAudioTracks().forEach(t => t.enabled = !state.mutedMic);
-  $('call-mute-btn').textContent = state.mutedMic ? '🔇' : '🎤';
-  $('call-mute-btn').classList.toggle('active', state.mutedMic);
-};
-$('call-cam-btn').onclick = () => {
-  const stream = state.activeCall?.stream;
-  if (!stream) return;
-  state.mutedCam = !state.mutedCam;
-  stream.getVideoTracks().forEach(t => t.enabled = !state.mutedCam);
-  $('call-cam-btn').textContent = state.mutedCam ? '📷' : '📸';
-  $('call-cam-btn').classList.toggle('active', state.mutedCam);
-};
-
-$('accept-call-btn').onclick = acceptCall;
-$('reject-call-btn').onclick = () => {
-  $('incoming-call').classList.add('hidden');
-  const p = state.pendingCall;
-  state.pendingCall = null;
-  if (p) sendCmd({cmd:'msg', payload:{v:1,type:'call_reject',call_id:p.payload.call_id}});
+  sendCmd({cmd:'quit'});
+  setTimeout(() => {
+    sendCmd({cmd:'init', room, nick,
+      key: crypto_state.privKeyHex,
+      whitelist_keys: crypto_state.whitelistHex,
+    });
+  }, 300);
 };
 
 $('lightbox').onclick = e => { if(e.target===$('lightbox')||e.target===$('lightbox-close')) $('lightbox').classList.add('hidden'); };
-
-$('share-room-btn').onclick = () => {
-  const room = state.rooms[state.activeRoomIdx];
-  if (!room) return;
-  navigator.clipboard.writeText(room.roomId).then(()=>toast('Room ID copied!','success'));
-};
-
 $('my-identity').onclick = () => {
-  if (state.myPubKey) {
-    navigator.clipboard.writeText(state.myPubKey).then(()=>toast('Public key copied!','success'));
-  }
+  if (state.myPubKey) navigator.clipboard.writeText(state.myPubKey).then(()=>toast('Public key copied!','success'));
 };
 
-// Auto-connect if query params present
-(()=>{
-  const p = new URLSearchParams(location.search);
-  const room = p.get('room');
-  const nick = p.get('nick');
-  const relay = p.get('relay');
-  if (room || nick || relay) {
-    if (relay) $('relay-input').value = relay;
-    if (room) $('room-input').value = room;
-    if (nick) $('nick-input').value = nick;
-  }
-})();
+// ── Init ──────────────────────────────────────────────────────────────────────
 
-// Tab visibility — could update title with unread count
-document.addEventListener('visibilitychange', ()=>{
-  if (!document.hidden) {
-    const room = state.rooms[state.activeRoomIdx];
-    if (room) room.unread=0;
-    document.title = 'SGTP — Secure Group Transfer';
-  }
-});
+setupKeyZone();
+setupWlZone();
+detectRelay();
+goStep(1);
 </script>
 </body>
 </html>

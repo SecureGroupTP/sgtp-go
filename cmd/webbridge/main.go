@@ -1,22 +1,11 @@
-// Command webbridge is a WebSocket-to-SGTP bridge.
+// Command webbridge — WebSocket-to-SGTP bridge.
 //
-// Exposes an HTTP server; browsers connect over WebSocket. For each session
-// the bridge creates a full SGTP client and forwards messages bidirectionally.
-//
-// ZERO extra dependencies — WebSocket is implemented per RFC 6455 using only
-// the Go standard library. golang.org/x/crypto is used indirectly via the
-// sgtp packages (already in go.mod).
+// Exposes an HTTP server; browsers connect over WebSocket.
+// For each session the bridge creates a full SGTP client and
+// forwards messages bidirectionally.
 //
 // Usage:
-//
-//	# Terminal 1 – relay server
-//	go run ./cmd/server -addr :7777
-//
-//	# Terminal 2 – web bridge (serves ./web/index.html on :8080)
-//	go run ./cmd/webbridge -relay localhost:7777 -http :8080 -whitelist ./keys/
-//
-//	# Browser
-//	open http://localhost:8080
+//   go run ./cmd/webbridge -relay localhost:77 -http :5735 -web ./web
 package main
 
 import (
@@ -45,28 +34,16 @@ import (
 
 // ── main ──────────────────────────────────────────────────────────────────────
 
-var KeyPath string
-
 func main() {
-	relayAddr := flag.String("relay", "localhost:7777", "SGTP relay server address")
-	httpAddr := flag.String("http", ":8080", "HTTP/WebSocket listen address")
-	whitelistDir := flag.String("whitelist", "", "directory with trusted ed25519 public keys")
-	webDir := flag.String("web", "./web", "directory to serve static files (web/index.html)")
-	keyPath := flag.String("key", "", "Path to private key")
+	relayAddr := flag.String("relay", "localhost:77", "SGTP relay server address")
+	httpAddr  := flag.String("http", ":5735", "HTTP/WebSocket listen address")
+	webDir    := flag.String("web", "./web", "directory to serve static files")
 	flag.Parse()
-	KeyPath = *keyPath
+
 	log.SetOutput(os.Stderr)
 	log.SetFlags(log.Ltime | log.Lmicroseconds)
 
-	whitelist := make(map[[32]byte]struct{})
-	if *whitelistDir != "" {
-		loaded, skipped := loadWhitelistDir(*whitelistDir, whitelist)
-		log.Printf("whitelist: loaded %d, skipped %d", len(loaded), len(skipped))
-	} else {
-		log.Printf("WARNING: no -whitelist — every SGTP peer is trusted")
-	}
-
-	hub := &Hub{relayAddr: *relayAddr, whitelist: whitelist}
+	hub := &Hub{relayAddr: *relayAddr}
 
 	http.Handle("/ws", http.HandlerFunc(hub.serveWS))
 	http.Handle("/", http.FileServer(http.Dir(*webDir)))
@@ -81,7 +58,6 @@ func main() {
 
 type Hub struct {
 	relayAddr string
-	whitelist map[[32]byte]struct{}
 }
 
 func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +69,6 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request) {
 	sess := &Session{
 		conn:      conn,
 		relayAddr: h.relayAddr,
-		whitelist: h.whitelist,
 		send:      make(chan []byte, 256),
 		quit:      make(chan struct{}),
 		peers:     make(map[string]string),
@@ -106,11 +81,9 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request) {
 type Session struct {
 	conn      *wsConn
 	relayAddr string
-	whitelist map[[32]byte]struct{}
-
-	client *sgtp.Client
-	uuid   [16]byte
-	pubHex string
+	client    *sgtp.Client
+	uuid      [16]byte
+	pubHex    string
 
 	send chan []byte
 	quit chan struct{}
@@ -122,30 +95,31 @@ type Session struct {
 	seq   uint64
 }
 
-// ── Bridge wire types ─────────────────────────────────────────────────────────
+// ── Wire types ────────────────────────────────────────────────────────────────
 
-// BridgeCommand is sent by the browser to the bridge.
+// BridgeCommand is sent by the browser.
 type BridgeCommand struct {
-	Cmd     string          `json:"cmd"`
-	Server  string          `json:"server,omitempty"`  // init: relay addr override
-	Room    string          `json:"room,omitempty"`    // init: room uuid hex (empty = new)
-	KeyHex  string          `json:"key,omitempty"`     // init: 64-byte ed25519 privkey hex
-	Nick    string          `json:"nick,omitempty"`    // init: display name
-	Payload json.RawMessage `json:"payload,omitempty"` // msg: ChatPayload JSON
+	Cmd           string          `json:"cmd"`
+	Server        string          `json:"server,omitempty"`
+	Room          string          `json:"room,omitempty"`
+	KeyHex        string          `json:"key,omitempty"`          // 128 hex chars — 64-byte raw ed25519 privkey
+	WhitelistKeys []string        `json:"whitelist_keys,omitempty"` // array of 64-hex-char pubkeys
+	Nick          string          `json:"nick,omitempty"`
+	Payload       json.RawMessage `json:"payload,omitempty"`
 }
 
-// BridgeEvent is sent by the bridge to the browser.
+// BridgeEvent is sent to the browser.
 type BridgeEvent struct {
-	Evt     string          `json:"evt"`
-	UUID    string          `json:"uuid,omitempty"`
-	Room    string          `json:"room,omitempty"`
-	PubKey  string          `json:"pubkey,omitempty"`
-	Nick    string          `json:"nick,omitempty"`
-	From    string          `json:"from,omitempty"`
-	TS      int64           `json:"ts,omitempty"`
-	SeqNo   uint64          `json:"seq,omitempty"`
+	Evt    string          `json:"evt"`
+	UUID   string          `json:"uuid,omitempty"`
+	Room   string          `json:"room,omitempty"`
+	PubKey string          `json:"pubkey,omitempty"`
+	Nick   string          `json:"nick,omitempty"`
+	From   string          `json:"from,omitempty"`
+	TS     int64           `json:"ts,omitempty"`
+	SeqNo  uint64          `json:"seq,omitempty"`
 	Payload json.RawMessage `json:"payload,omitempty"`
-	Msg     string          `json:"msg,omitempty"`
+	Msg    string          `json:"msg,omitempty"`
 }
 
 // ── Session lifecycle ─────────────────────────────────────────────────────────
@@ -180,8 +154,6 @@ func (s *Session) dispatch(cmd BridgeCommand) {
 		s.handleInit(cmd)
 	case "msg":
 		s.handleMsg(cmd)
-	case "history":
-		s.push(BridgeEvent{Evt: "history_done"})
 	case "quit":
 		if s.client != nil {
 			_ = s.client.Disconnect()
@@ -196,8 +168,8 @@ func (s *Session) dispatch(cmd BridgeCommand) {
 
 func (s *Session) handleInit(cmd BridgeCommand) {
 	if s.client != nil {
-		s.pushErr("already connected — send quit first")
-		return
+		_ = s.client.Disconnect()
+		s.client = nil
 	}
 
 	relay := s.relayAddr
@@ -205,27 +177,44 @@ func (s *Session) handleInit(cmd BridgeCommand) {
 		relay = cmd.Server
 	}
 
-	// Keypair.
+	// ── Keypair ──────────────────────────────────────────────────────────────
 	var pubKey, privKey []byte
-	if cmd.KeyHex != "" {
-		raw, err := hex.DecodeString(cmd.KeyHex)
-		if err != nil || len(raw) != 64 {
-			s.pushErr("key: need 128 hex chars (64-byte raw ed25519 privkey)")
-			return
-		}
-		privKey = raw
-		pubKey = raw[32:]
-	} else {
-		pub, priv, err := protocol.LoadEd25519FromOpenSSHFile(KeyPath)
-		if err != nil {
-			s.pushErr("keygen: " + err.Error())
-			return
-		}
-		pubKey = pub
-		privKey = priv
+	if cmd.KeyHex == "" {
+		s.pushErr("key: private key hex is required (upload your key in the browser)")
+		return
 	}
+	raw, err := hex.DecodeString(cmd.KeyHex)
+	if err != nil || len(raw) != 64 {
+		s.pushErr("key: need 128 hex chars (64-byte raw ed25519 privkey — seed + pubkey)")
+		return
+	}
+	privKey = raw
+	pubKey = raw[32:]
 
-	// Room UUID.
+	// ── Whitelist ─────────────────────────────────────────────────────────────
+	// Always trust the connecting user's own key.
+	wl := make(map[[32]byte]struct{})
+	var selfKey [32]byte
+	copy(selfKey[:], pubKey)
+	wl[selfKey] = struct{}{}
+
+	// Add keys sent by the browser (whitelist .pub files parsed client-side).
+	for _, hexKey := range cmd.WhitelistKeys {
+		decoded, err := hex.DecodeString(hexKey)
+		if err != nil || len(decoded) != 32 {
+			log.Printf("whitelist: skipping bad key %q", hexKey[:min(len(hexKey), 16)])
+			continue
+		}
+		var arr [32]byte
+		copy(arr[:], decoded)
+		wl[arr] = struct{}{}
+	}
+	log.Printf("whitelist: %d trusted keys (including self)", len(wl))
+
+	// Also try to load from /data/whitelist/ if mounted (optional server-side)
+	loadWhitelistDirInto("/data/whitelist", wl)
+
+	// ── Room UUID ─────────────────────────────────────────────────────────────
 	var roomID [16]byte
 	if cmd.Room != "" {
 		clean := strings.ReplaceAll(cmd.Room, "-", "")
@@ -241,14 +230,6 @@ func (s *Session) handleInit(cmd BridgeCommand) {
 
 	myUUID := uuidV7()
 
-	wl := make(map[[32]byte]struct{}, len(s.whitelist)+1)
-	for k, v := range s.whitelist {
-		wl[k] = v
-	}
-	var arr [32]byte
-	copy(arr[:], pubKey)
-	wl[arr] = struct{}{}
-
 	c, err := sgtp.New(sgtp.Config{
 		ServerAddr:   relay,
 		RoomUUID:     roomID,
@@ -256,7 +237,7 @@ func (s *Session) handleInit(cmd BridgeCommand) {
 		PrivateKey:   privKey,
 		PublicKey:    pubKey,
 		Whitelist:    wl,
-		InfoDelay:    500 * time.Millisecond,
+		InfoDelay:    1 * time.Second,
 		HistoryStore: newMemStore(),
 	})
 	if err != nil {
@@ -458,30 +439,32 @@ func (m *memStore) Append(r sgtp.HistoryRecord) {
 	m.mu.Unlock()
 }
 
-// ── Whitelist loader ──────────────────────────────────────────────────────────
+// ── Whitelist helpers ─────────────────────────────────────────────────────────
 
-func loadWhitelistDir(dir string, wl map[[32]byte]struct{}) (loaded, skipped []string) {
+// loadWhitelistDirInto tries to load .pub files from dir into wl.
+// Silently skips if dir does not exist.
+func loadWhitelistDirInto(dir string, wl map[[32]byte]struct{}) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		log.Printf("whitelist: cannot read dir %s: %v", dir, err)
-		return
+		return // dir may not be mounted — that's fine
 	}
+	loaded := 0
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
-		path := filepath.Join(dir, e.Name())
-		pub, err := tryLoadPubKey(path)
+		pub, err := tryLoadPubKey(filepath.Join(dir, e.Name()))
 		if err != nil {
-			skipped = append(skipped, e.Name())
 			continue
 		}
 		var arr [32]byte
 		copy(arr[:], pub)
 		wl[arr] = struct{}{}
-		loaded = append(loaded, e.Name())
+		loaded++
 	}
-	return
+	if loaded > 0 {
+		log.Printf("whitelist: +%d keys from %s", loaded, dir)
+	}
 }
 
 func tryLoadPubKey(path string) ([]byte, error) {
@@ -526,11 +509,17 @@ func uuidV7() [16]byte {
 	return u
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // ── Zero-dependency WebSocket (RFC 6455) ──────────────────────────────────────
 
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-// upgradeWebSocket performs the HTTP→WS handshake and hijacks the TCP connection.
 func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (*wsConn, error) {
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
 		return nil, fmt.Errorf("not a WebSocket upgrade")
@@ -563,7 +552,6 @@ func upgradeWebSocket(w http.ResponseWriter, r *http.Request) (*wsConn, error) {
 	return &wsConn{conn: netConn, br: bufrw.Reader}, nil
 }
 
-// wsConn wraps a hijacked TCP connection and implements WebSocket framing.
 type wsConn struct {
 	conn net.Conn
 	br   *bufio.Reader
@@ -572,7 +560,6 @@ type wsConn struct {
 
 func (c *wsConn) close() { c.conn.Close() }
 
-// readMessage reads a complete WebSocket message (reassembling fragments).
 func (c *wsConn) readMessage() ([]byte, error) {
 	var msg []byte
 	for {
@@ -581,12 +568,12 @@ func (c *wsConn) readMessage() ([]byte, error) {
 			return nil, err
 		}
 		switch opcode {
-		case 8: // close
+		case 8:
 			return nil, io.EOF
-		case 9: // ping → pong
+		case 9:
 			_ = c.writeFrame(10, payload)
 			continue
-		case 10: // pong
+		case 10:
 			continue
 		}
 		msg = append(msg, payload...)
